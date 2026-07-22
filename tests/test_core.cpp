@@ -101,8 +101,15 @@ void CoreTests::measuresLatencyAfterSocksHandshake()
             }
             if (*state == 1 && buffer->size() >= 10) {
                 *state = 2;
+                buffer->clear();
+                socket->write(QByteArray::fromHex("050000017f00000101bb"));
+                return;
+            }
+            if (*state == 2 && buffer->contains(QByteArrayLiteral("\r\n\r\n"))) {
+                *state = 3;
                 QTimer::singleShot(80, socket, [socket] {
-                    socket->write(QByteArray::fromHex("050000017f00000101bb"));
+                    socket->write(QByteArrayLiteral(
+                        "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"));
                 });
             }
         });
@@ -110,8 +117,9 @@ void CoreTests::measuresLatencyAfterSocksHandshake()
 
     LatencyMonitor monitor;
     QSignalSpy measurements(&monitor, &LatencyMonitor::latencyChanged);
-    monitor.startViaSocks(QStringLiteral("127.0.0.1"), proxy.serverPort(),
-                          QStringLiteral("1.1.1.1"), 443);
+    monitor.startHttpViaSocks(QStringLiteral("127.0.0.1"), proxy.serverPort(),
+                              QStringLiteral("1.1.1.1"), 80,
+                              QStringLiteral("one.one.one.one"));
 
     QTRY_VERIFY_WITH_TIMEOUT(
         !measurements.isEmpty() && measurements.constLast().constFirst().toInt() >= 60,

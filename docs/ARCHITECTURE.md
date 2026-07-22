@@ -19,11 +19,12 @@ state. A small privileged helper lives only as a child of the authenticated GUI 
 over inherited stdin/stdout pipes; it creates no socket and exits on EOF or parent death.
 
 While connected, the GUI performs a SOCKS5 CONNECT through the selected core's loopback-only mixed
-inbound to Cloudflare's public IPv4 resolver every five seconds. Unlike a normal socket that may
-follow a physical-route exception, this cannot report success without traversing the VLESS
-outbound, so it includes both VPN and exit latency. The probe is asynchronous, has a three-second
-timeout, never crosses the privilege boundary, works when ICMP echo is blocked, and sends no
-profile credentials.
+inbound and waits for an HTTP response from Cloudflare's public IPv4 endpoint every five seconds.
+Waiting for application data is important because a SOCKS server may acknowledge CONNECT before
+the remote path has completed. Unlike a normal socket that may follow a physical-route exception,
+this probe cannot report success without a full VLESS round trip, so it includes both VPN and exit
+latency. It is asynchronous, has a three-second timeout, never crosses the privilege boundary,
+works when ICMP echo is blocked, and sends no profile credentials.
 
 ## Privilege boundary
 

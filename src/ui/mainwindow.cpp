@@ -258,8 +258,9 @@ void MainWindow::applyState(SystemdCoreManager::State state)
         m_trayIcon->setToolTip(QStringLiteral("LightTunnel — подключено"));
         // This public IPv4 address is intentionally reached through the TUN. Measuring the
         // VLESS endpoint itself would only measure its physical-route exception.
-        m_latencyMonitor.startViaSocks(QStringLiteral("127.0.0.1"), LocalSocksPort,
-                                       QStringLiteral("1.1.1.1"), 443);
+        m_latencyMonitor.startHttpViaSocks(QStringLiteral("127.0.0.1"), LocalSocksPort,
+                                           QStringLiteral("1.1.1.1"), 80,
+                                           QStringLiteral("one.one.one.one"));
     } else if (busy) {
         m_connectButton->setText(state == SystemdCoreManager::State::Starting
                                      ? QStringLiteral("Подключение…")
@@ -403,7 +404,7 @@ void MainWindow::buildUi()
     m_latencyBadge->setProperty("latencyQuality", QStringLiteral("unavailable"));
     m_latencyBadge->setAlignment(Qt::AlignCenter);
     m_latencyBadge->setToolTip(
-        QStringLiteral("Задержка TCP-подключения через VPN-туннель до 1.1.1.1"));
+        QStringLiteral("Время до HTTP-ответа 1.1.1.1 через SOCKS/VLESS-туннель"));
     statusRow->addWidget(m_latencyBadge, 0, Qt::AlignTop);
     statusLayout->addLayout(statusRow);
 
