@@ -1,9 +1,9 @@
 #pragma once
 
-#include <QtTypes>
+#include <cstdint>
 
 namespace lighttunnel {
 
-inline constexpr quint16 LocalSocksPort = 2080;
+inline constexpr std::uint16_t LocalSocksPort = 2080;
 
 } // namespace lighttunnel
