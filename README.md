@@ -1,10 +1,10 @@
-# LightTunnel
+# 🛡️ LightTunnel
 
 LightTunnel is a small native VLESS VPN client for Linux. The interface is written in modern
 C++20 and Qt 6; the network engine is the official `sing-box` executable installed on the
 system. The project is independent and is not affiliated with the sing-box maintainers.
 
-## Current feature set
+## ✨ Current feature set
 
 - Import one or several `vless://` links, including plain or Base64 subscription URLs.
 - VLESS over TCP, WebSocket, gRPC and HTTPUpgrade.
@@ -21,7 +21,7 @@ system. The project is independent and is not affiliated with the sing-box maint
 LightTunnel deliberately does **not** run its GUI as root. It asks Polkit to create a hardened,
 transient systemd service for the sing-box process. The service disappears after it stops.
 
-## Requirements
+## 📦 Requirements
 
 - Linux with systemd and Polkit
 - Qt 6 (`Core`, `Gui`, `Widgets`, `Network`, and `Test` for tests)
@@ -34,7 +34,7 @@ shipped with v2rayN, or a manually selected executable. On a clean system it dow
 stable official sing-box release on first launch, verifies the SHA-256 published by GitHub, checks
 the reported version, and stores the executable in the private application data directory.
 
-## Build and run
+## 🛠️ Build and run
 
 ```bash
 cd ~/Desktop/MyProjects/LightTunnel
@@ -42,7 +42,7 @@ cd ~/Desktop/MyProjects/LightTunnel
 ./build/lighttunnel
 ```
 
-### Debian and Ubuntu
+### 🌀 Debian and Ubuntu
 
 On a current Debian- or Ubuntu-based distribution with systemd, install the build and runtime
 dependencies, then install LightTunnel for the current user:
@@ -73,7 +73,7 @@ cd lighttunnel
 On GNOME, install or enable an AppIndicator/KStatusNotifier extension if the tray icon is not
 shown. The main window and VPN connection work without that extension.
 
-### Arch Linux and Manjaro package
+### 🐧 Arch Linux and Manjaro package
 
 Build and install a pacman-managed package:
 
@@ -106,7 +106,7 @@ Install only for the current user:
 This installs the binary, desktop entry and icon below `~/.local`; it does not install or modify
 sing-box.
 
-## Uninstall
+## 🧹 Uninstall
 
 Remove a package installed with `makepkg -si`:
 
@@ -126,7 +126,7 @@ Profiles and settings are retained by default. To delete them as well:
 ./scripts/uninstall.sh --purge-user-data
 ```
 
-## First connection
+## 🚀 First connection
 
 1. Open **Profiles…** and paste a `vless://` link.
 2. Open **Settings** and verify the detected sing-box and network interface.
@@ -139,7 +139,7 @@ so may add browser fallback latency.
 Stop other full-device VPN/TUN clients before connecting. Stacking applications that both change
 the default route is distribution-dependent and is intentionally not automated.
 
-## Data and security
+## 🔐 Data and security
 
 Profiles contain credentials. They live in:
 
@@ -156,7 +156,7 @@ limited, and are activated only after their GitHub Release SHA-256 and embedded 
 
 For a threat model and design details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Known limitations
+## ⚠️ Known limitations
 
 - VLESS XHTTP is not enabled yet because its client schema is still evolving between cores.
 - Subscription import is currently one-shot; periodic background refresh and QR scanning are planned.
@@ -164,7 +164,7 @@ For a threat model and design details, see [docs/ARCHITECTURE.md](docs/ARCHITECT
 - Profiles are protected by filesystem permissions, not by KWallet/Secret Service encryption yet.
 - The application currently targets systemd-based distributions.
 
-## Licensing
+## 📄 Licensing
 
 LightTunnel source code is MIT licensed. sing-box is a separate executable distributed under
 GPL-3.0-or-later; consult its own repository and license when redistributing it.
