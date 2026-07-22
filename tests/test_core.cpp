@@ -67,7 +67,7 @@ void CoreTests::rejectsUnsupportedTransport()
         "vless://11111111-2222-3333-4444-555555555555@example.com:443?type=xhttp#Unsupported");
     QString error;
     QVERIFY(!VlessProfile::fromUri(uri, &error).has_value());
-    QVERIFY(error.contains(QStringLiteral("не поддерживается")));
+    QVERIFY(error.contains(QStringLiteral("Xray-core")));
 }
 
 void CoreTests::bindsEveryNetworkOutbound()

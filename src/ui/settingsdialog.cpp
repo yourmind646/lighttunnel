@@ -1,6 +1,8 @@
 #include "ui/settingsdialog.h"
 
+#include <QAbstractItemView>
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileDialog>
@@ -9,11 +11,32 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QNetworkInterface>
+#include <QPalette>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
 namespace lighttunnel {
+namespace {
+
+void makePopupOpaque(QComboBox *comboBox)
+{
+    QAbstractItemView *view = comboBox->view();
+    QPalette palette = view->palette();
+    palette.setColor(QPalette::Base, QColor(QStringLiteral("#121a2d")));
+    palette.setColor(QPalette::Window, QColor(QStringLiteral("#121a2d")));
+    palette.setColor(QPalette::Text, QColor(QStringLiteral("#e7ecf5")));
+    palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#2d3a5d")));
+    palette.setColor(QPalette::HighlightedText, QColor(QStringLiteral("#ffffff")));
+    view->setPalette(palette);
+    view->setAutoFillBackground(true);
+    view->viewport()->setPalette(palette);
+    view->viewport()->setAutoFillBackground(true);
+    view->window()->setPalette(palette);
+    view->window()->setAutoFillBackground(true);
+}
+
+} // namespace
 
 SettingsDialog::SettingsDialog(const AppSettings &settings, QWidget *parent)
     : QDialog(parent)
@@ -58,6 +81,7 @@ SettingsDialog::SettingsDialog(const AppSettings &settings, QWidget *parent)
         m_interface->addItem(settings.networkInterface, settings.networkInterface);
         m_interface->setCurrentIndex(m_interface->count() - 1);
     }
+    makePopupOpaque(m_interface);
     form->addRow(QStringLiteral("Интерфейс выхода:"), m_interface);
 
     m_stack = new QComboBox(this);
@@ -65,6 +89,7 @@ SettingsDialog::SettingsDialog(const AppSettings &settings, QWidget *parent)
     m_stack->addItem(QStringLiteral("gVisor — совместимее"), QStringLiteral("gvisor"));
     m_stack->addItem(QStringLiteral("Mixed"), QStringLiteral("mixed"));
     m_stack->setCurrentIndex(qMax(0, m_stack->findData(settings.tunStack)));
+    makePopupOpaque(m_stack);
     form->addRow(QStringLiteral("TUN stack:"), m_stack);
 
     m_mtu = new QSpinBox(this);

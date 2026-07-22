@@ -132,7 +132,23 @@ QComboBox::down-arrow {
     width: 12px;
     height: 12px;
 }
-QComboBox QAbstractItemView { background: #121a2d; border: 1px solid #34415f; }
+QComboBox QAbstractItemView {
+    background-color: #121a2d;
+    color: #e7ecf5;
+    border: 1px solid #34415f;
+    padding: 4px;
+    outline: 0;
+    selection-background-color: #2d3a5d;
+    selection-color: #ffffff;
+}
+QComboBox QAbstractItemView::item {
+    background-color: #121a2d;
+    color: #e7ecf5;
+    min-height: 30px;
+    padding: 3px 8px;
+}
+QComboBox QAbstractItemView::item:selected { background-color: #2d3a5d; color: #ffffff; }
+QComboBoxPrivateContainer { background-color: #121a2d; border: 1px solid #34415f; }
 
 QListWidget { padding: 5px; }
 QListWidget::item { padding: 9px; border-radius: 6px; }

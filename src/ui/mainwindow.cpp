@@ -59,6 +59,13 @@ MainWindow::MainWindow(QWidget *parent)
     reloadProfiles(m_settings.lastProfileId);
     m_coreUpdater.setCurrentCore(m_settings.corePath);
 
+    if (m_settings.autostart) {
+        QString autostartError;
+        if (!AutostartManager::setEnabled(true, &autostartError)) {
+            appendLog(autostartError);
+        }
+    }
+
     connect(&m_coreManager, &SystemdCoreManager::stateChanged, this, &MainWindow::applyState);
     connect(&m_coreManager, &SystemdCoreManager::logLine, this, &MainWindow::appendLog);
     connect(&m_coreManager, &SystemdCoreManager::errorOccurred, this, [this](const QString &message) {
@@ -99,10 +106,9 @@ MainWindow::MainWindow(QWidget *parent)
     });
 }
 
-void MainWindow::handleStartup(bool forceMinimized)
+void MainWindow::handleStartup()
 {
-    const bool minimized = forceMinimized || m_settings.startMinimized;
-    if (!minimized || !QSystemTrayIcon::isSystemTrayAvailable()) {
+    if (!m_settings.startMinimized || !QSystemTrayIcon::isSystemTrayAvailable()) {
         show();
         raise();
         activateWindow();

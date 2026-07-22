@@ -27,7 +27,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override = default;
 
-    void handleStartup(bool forceMinimized);
+    void handleStartup();
 
 protected:
     void closeEvent(QCloseEvent *event) override;

@@ -46,7 +46,7 @@ bool AutostartManager::setEnabled(bool enabled, QString *error)
         "Type=Application\n"
         "Name=LightTunnel\n"
         "Comment=Lightweight VLESS VPN client\n"
-        "Exec=\"%1\" --minimized\n"
+        "Exec=\"%1\"\n"
         "Icon=lighttunnel\n"
         "Terminal=false\n"
         "Categories=Network;Security;\n"

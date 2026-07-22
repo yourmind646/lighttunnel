@@ -44,7 +44,6 @@ int main(int argc, char *argv[])
     }
 
     lighttunnel::MainWindow window;
-    const bool forceMinimized = application.arguments().contains(QStringLiteral("--minimized"));
-    window.handleStartup(forceMinimized);
+    window.handleStartup();
     return application.exec();
 }

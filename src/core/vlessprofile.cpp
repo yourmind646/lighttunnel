@@ -183,13 +183,18 @@ QString VlessProfile::validationError() const
         return QStringLiteral("Некорректный UUID VLESS-профиля");
     }
 
+    const QString normalized = normalizedTransport(transport);
+    if (normalized == QStringLiteral("xhttp") || normalized == QStringLiteral("splithttp")) {
+        return QStringLiteral("XHTTP требует Xray-core и не поддерживается ядром sing-box");
+    }
+
     static const QSet<QString> supportedTransports{
         QStringLiteral("tcp"),
         QStringLiteral("ws"),
         QStringLiteral("grpc"),
         QStringLiteral("httpupgrade"),
     };
-    if (!supportedTransports.contains(normalizedTransport(transport))) {
+    if (!supportedTransports.contains(normalized)) {
         return QStringLiteral("Транспорт «%1» пока не поддерживается").arg(transport);
     }
 
