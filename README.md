@@ -32,10 +32,10 @@ transient systemd service for the selected core process. The service disappears 
 - `libarchive`/`bsdtar` for installing core updates
 
 An existing core installation is optional. On a clean system LightTunnel downloads the latest
-stable release of the selected core, verifies the SHA-256 published by GitHub, checks the reported
-version, and stores it below its own private application data directory. System executables and
-old v2rayN cores can be detected for migration, but an automatic update moves normal operation to
-LightTunnel's own managed copy.
+stable sing-box release or latest official Xray rolling release, verifies the SHA-256 published by
+GitHub, checks the reported version, and stores it below its own private application data
+directory. System executables and old v2rayN cores can be detected for migration, but an automatic
+update moves normal operation to LightTunnel's own managed copy.
 
 ## 🛠️ Build and run
 
@@ -164,6 +164,8 @@ For a threat model and design details, see [docs/ARCHITECTURE.md](docs/ARCHITECT
 
 - XHTTP profiles require selecting Xray; LightTunnel reports a clear error if one is started with
   sing-box.
+- Native Xray TUN auto-routing requires Xray 26.5.9 or newer. LightTunnel follows the official
+  Xray rolling channel because GitHub's “latest stable” endpoint remains on the broken 26.3.27.
 - The sing-box backend currently uses an IPv4-only TUN and restricts DNS responses to IPv4. Xray's
   native TUN routes both IPv4 and IPv6 through the server.
 - Subscription import is currently one-shot; periodic background refresh and QR scanning are planned.

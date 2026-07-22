@@ -40,6 +40,7 @@ public:
     [[nodiscard]] bool isBusy() const noexcept { return m_reply != nullptr; }
 
     [[nodiscard]] static QString detectVersion(const QString &corePath, CoreType type);
+    [[nodiscard]] static bool supportsNativeXrayRouting(const QString &version);
     [[nodiscard]] static std::optional<CoreRelease> parseRelease(const QByteArray &json,
                                                                 CoreType type,
                                                                 QString *error = nullptr);

@@ -65,10 +65,12 @@ the KDE backend.
 
 ## Core updates
 
-The updater requests only the latest stable release from the official SagerNet or XTLS GitHub
-repository, according to the selected core. It selects the exact Linux archive for x86_64 or arm64
-and requires the `sha256:` digest exposed by the GitHub Releases API. Responses and downloads have
-strict size and timeout limits. Redirects may not downgrade HTTPS.
+The updater requests the latest stable sing-box release or the latest official Xray rolling
+release from the respective upstream GitHub repository. Xray publishes current builds as GitHub
+pre-releases; following that channel is required for native Linux TUN routing fixes newer than
+26.3.27. The updater selects the exact Linux archive for x86_64 or arm64 and requires the
+`sha256:` digest exposed by the GitHub Releases API. Responses and downloads have strict size and
+timeout limits. Redirects may not downgrade HTTPS.
 
 The archive hash is checked before extraction. Only the expected `sing-box` or `xray` executable is
 extracted; path traversal and symlinks are rejected, and the resulting binary must report the

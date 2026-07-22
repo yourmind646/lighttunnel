@@ -1,5 +1,6 @@
 #include "core/systemdcoremanager.h"
 
+#include "core/coreupdatemanager.h"
 #include "core/singboxconfigbuilder.h"
 #include "core/systemdcommandbuilder.h"
 #include "core/xrayconfigbuilder.h"
@@ -87,6 +88,17 @@ void SystemdCoreManager::connectTunnel(const VlessProfile &profile, const AppSet
                                .arg(coreDisplayName(m_runningCoreType)));
         setState(State::Error);
         return;
+    }
+    if (m_runningCoreType == CoreType::Xray) {
+        const QString version = CoreUpdateManager::detectVersion(m_corePath, CoreType::Xray);
+        if (!CoreUpdateManager::supportsNativeXrayRouting(version)) {
+            emit errorOccurred(
+                QStringLiteral("Xray %1 не поддерживает надёжную автоматическую маршрутизацию "
+                               "native TUN. Обновите Xray до 26.5.9 или новее кнопкой «Проверить».")
+                    .arg(version.isEmpty() ? QStringLiteral("неизвестной версии") : version));
+            setState(State::Error);
+            return;
+        }
     }
 
     const QString networkInterface = settings.effectiveInterface();

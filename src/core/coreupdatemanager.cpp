@@ -63,7 +63,12 @@ QString binaryName(CoreType type)
 QString metadataUrl(CoreType type)
 {
     return type == CoreType::Xray
-        ? QStringLiteral("https://api.github.com/repos/XTLS/Xray-core/releases/latest")
+        // Xray publishes its rolling releases as GitHub pre-releases.  The
+        // /releases/latest endpoint deliberately ignores them and currently
+        // strands native TUN users on 26.3.27, whose Linux auto-routing is
+        // incomplete.  The releases collection includes the newest official
+        // rolling build while still excluding drafts for anonymous clients.
+        ? QStringLiteral("https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1")
         : QStringLiteral("https://api.github.com/repos/SagerNet/sing-box/releases/latest");
 }
 
@@ -165,7 +170,9 @@ void CoreUpdateManager::checkForUpdates(bool force)
         return;
     }
 
-    if (!force && !m_currentPath.isEmpty()) {
+    const bool requiresXrayRoutingFix = m_coreType == CoreType::Xray
+        && !supportsNativeXrayRouting(m_currentVersion);
+    if (!force && !m_currentPath.isEmpty() && !requiresXrayRoutingFix) {
         QSettings settings;
         const QDateTime lastCheck = settings.value(
             QStringLiteral("core/%1/lastUpdateCheck").arg(coreTypeKey(m_coreType))).toDateTime();
@@ -207,24 +214,43 @@ QString CoreUpdateManager::detectVersion(const QString &corePath, CoreType type)
     return match.hasMatch() ? normalizedVersion(match.captured(1)) : QString();
 }
 
+bool CoreUpdateManager::supportsNativeXrayRouting(const QString &version)
+{
+    const QVersionNumber detected = QVersionNumber::fromString(normalizedVersion(version));
+    const QVersionNumber minimum(26, 5, 9);
+    return !detected.isNull() && QVersionNumber::compare(detected, minimum) >= 0;
+}
+
 std::optional<CoreRelease> CoreUpdateManager::parseRelease(const QByteArray &json,
                                                            CoreType type,
                                                            QString *error)
 {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+    if (parseError.error != QJsonParseError::NoError
+        || (!document.isObject() && !document.isArray())) {
         if (error != nullptr) {
             *error = QStringLiteral("GitHub вернул некорректные метаданные релиза");
         }
         return std::nullopt;
     }
 
-    const QJsonObject root = document.object();
-    if (root.value(QStringLiteral("draft")).toBool()
-        || root.value(QStringLiteral("prerelease")).toBool()) {
+    QJsonObject root;
+    if (document.isObject()) {
+        root = document.object();
+    } else {
+        const QJsonArray releases = document.array();
+        if (!releases.isEmpty() && releases.first().isObject()) {
+            root = releases.first().toObject();
+        }
+    }
+    if (root.isEmpty() || root.value(QStringLiteral("draft")).toBool()
+        || (type == CoreType::SingBox
+            && root.value(QStringLiteral("prerelease")).toBool())) {
         if (error != nullptr) {
-            *error = QStringLiteral("Последний релиз не является стабильным");
+            *error = type == CoreType::Xray
+                ? QStringLiteral("GitHub не вернул официальный rolling-релиз Xray")
+                : QStringLiteral("Последний релиз sing-box не является стабильным");
         }
         return std::nullopt;
     }

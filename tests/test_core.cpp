@@ -34,6 +34,8 @@ private slots:
     void xrayKeepsServerRoutingAuthoritative();
     void parsesVerifiedCoreRelease();
     void parsesVerifiedXrayRelease();
+    void rejectsPrereleaseSingBoxRelease();
+    void rejectsXrayWithoutNativeTunRoutingFix();
     void generatedConfigPassesSingBoxCheck();
     void generatedConfigPassesXrayCheck();
 };
@@ -226,23 +228,46 @@ void CoreTests::parsesVerifiedCoreRelease()
 
 void CoreTests::parsesVerifiedXrayRelease()
 {
-    const QByteArray json = R"json({
-        "tag_name": "v26.3.27",
+    const QByteArray json = R"json([{
+        "tag_name": "v26.7.11",
         "draft": false,
-        "prerelease": false,
+        "prerelease": true,
         "assets": [{
             "name": "Xray-linux-64.zip",
-            "size": 21136402,
-            "digest": "sha256:23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae",
-            "browser_download_url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip"
+            "size": 21110967,
+            "digest": "sha256:aa11c3685c71da0ffc71e511db50404609e7e963bb914b048f59a6a00af8930e",
+            "browser_download_url": "https://github.com/XTLS/Xray-core/releases/download/v26.7.11/Xray-linux-64.zip"
         }]
-    })json";
+    }])json";
 
     QString error;
     const auto release = CoreUpdateManager::parseRelease(json, CoreType::Xray, &error);
     QVERIFY2(release.has_value(), qPrintable(error));
-    QCOMPARE(release->version, QStringLiteral("26.3.27"));
+    QCOMPARE(release->version, QStringLiteral("26.7.11"));
     QCOMPARE(release->assetName, QStringLiteral("Xray-linux-64.zip"));
+}
+
+void CoreTests::rejectsPrereleaseSingBoxRelease()
+{
+    const QByteArray json = R"json({
+        "tag_name": "v1.14.0-rc.1",
+        "draft": false,
+        "prerelease": true,
+        "assets": []
+    })json";
+
+    QString error;
+    const auto release = CoreUpdateManager::parseRelease(json, CoreType::SingBox, &error);
+    QVERIFY(!release.has_value());
+    QVERIFY(error.contains(QStringLiteral("стабильным")));
+}
+
+void CoreTests::rejectsXrayWithoutNativeTunRoutingFix()
+{
+    QVERIFY(!CoreUpdateManager::supportsNativeXrayRouting(QStringLiteral("26.3.27")));
+    QVERIFY(CoreUpdateManager::supportsNativeXrayRouting(QStringLiteral("26.5.9")));
+    QVERIFY(CoreUpdateManager::supportsNativeXrayRouting(QStringLiteral("v26.7.11")));
+    QVERIFY(!CoreUpdateManager::supportsNativeXrayRouting(QString()));
 }
 
 void CoreTests::generatedConfigPassesSingBoxCheck()
