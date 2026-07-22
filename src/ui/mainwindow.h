@@ -65,7 +65,6 @@ private:
     StatusIndicator *m_statusIndicator{};
     QLabel *m_statusTitle{};
     QLabel *m_statusSubtitle{};
-    QLabel *m_statusBadge{};
     QLabel *m_latencyBadge{};
     QLabel *m_endpointValue{};
     QLabel *m_interfaceValue{};

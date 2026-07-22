@@ -63,7 +63,8 @@ QJsonObject SingBoxConfigBuilder::build(const VlessProfile &profile,
         {QStringLiteral("type"), QStringLiteral("tun")},
         {QStringLiteral("tag"), QStringLiteral("tun-in")},
         {QStringLiteral("interface_name"), QStringLiteral("lighttunnel")},
-        {QStringLiteral("address"), stringArray({QStringLiteral("172.19.0.1/30")})},
+        {QStringLiteral("address"), stringArray({QStringLiteral("172.19.0.1/30"),
+                                                   QStringLiteral("fdfe:dcba:9876::1/126")})},
         {QStringLiteral("mtu"), settings.mtu},
         {QStringLiteral("auto_route"), true},
         {QStringLiteral("auto_redirect"), true},
@@ -83,6 +84,10 @@ QJsonObject SingBoxConfigBuilder::build(const VlessProfile &profile,
         QJsonObject{
             {QStringLiteral("port"), 53},
             {QStringLiteral("action"), QStringLiteral("hijack-dns")},
+        },
+        QJsonObject{
+            {QStringLiteral("ip_version"), 6},
+            {QStringLiteral("action"), QStringLiteral("reject")},
         },
         QJsonObject{{QStringLiteral("action"), QStringLiteral("sniff")}},
         QJsonObject{
@@ -129,6 +134,10 @@ QJsonObject SingBoxConfigBuilder::buildProxyOutbound(const VlessProfile &profile
         {QStringLiteral("server_port"), static_cast<int>(profile.serverPort)},
         {QStringLiteral("uuid"), profile.uuid},
         {QStringLiteral("packet_encoding"), QStringLiteral("xudp")},
+        {QStringLiteral("domain_resolver"), QJsonObject{
+             {QStringLiteral("server"), QStringLiteral("local_dns")},
+             {QStringLiteral("strategy"), QStringLiteral("ipv4_only")},
+         }},
     };
     if (!profile.flow.isEmpty()) {
         outbound.insert(QStringLiteral("flow"), profile.flow);

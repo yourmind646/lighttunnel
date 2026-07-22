@@ -60,8 +60,36 @@ QJsonObject XrayConfigBuilder::build(const VlessProfile &profile,
         {QStringLiteral("tag"), QStringLiteral("direct")},
         {QStringLiteral("protocol"), QStringLiteral("freedom")},
     });
+    outbounds.append(QJsonObject{
+        {QStringLiteral("tag"), QStringLiteral("blocked")},
+        {QStringLiteral("protocol"), QStringLiteral("blackhole")},
+    });
+    outbounds.append(QJsonObject{
+        {QStringLiteral("tag"), QStringLiteral("dns-out")},
+        {QStringLiteral("protocol"), QStringLiteral("dns")},
+        {QStringLiteral("settings"), QJsonObject{
+             {QStringLiteral("rules"), QJsonArray{
+                  QJsonObject{
+                      {QStringLiteral("action"), QStringLiteral("return")},
+                      {QStringLiteral("qType"), 28},
+                      {QStringLiteral("rCode"), 0},
+                  },
+              }},
+         }},
+    });
 
     QJsonArray rules{
+        QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("field")},
+            {QStringLiteral("network"), QStringLiteral("tcp,udp")},
+            {QStringLiteral("port"), QStringLiteral("53")},
+            {QStringLiteral("outboundTag"), QStringLiteral("dns-out")},
+        },
+        QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("field")},
+            {QStringLiteral("ip"), strings({QStringLiteral("::/0")})},
+            {QStringLiteral("outboundTag"), QStringLiteral("blocked")},
+        },
         QJsonObject{
             {QStringLiteral("type"), QStringLiteral("field")},
             {QStringLiteral("ip"), strings({
@@ -69,17 +97,11 @@ QJsonObject XrayConfigBuilder::build(const VlessProfile &profile,
                  QStringLiteral("100.64.0.0/10"), QStringLiteral("127.0.0.0/8"),
                  QStringLiteral("169.254.0.0/16"), QStringLiteral("172.16.0.0/12"),
                  QStringLiteral("192.168.0.0/16"), QStringLiteral("224.0.0.0/4"),
-                 QStringLiteral("240.0.0.0/4"), QStringLiteral("::1/128"),
-                 QStringLiteral("fc00::/7"), QStringLiteral("fe80::/10"),
-                 QStringLiteral("ff00::/8")})},
+                 QStringLiteral("240.0.0.0/4")})},
             {QStringLiteral("outboundTag"), QStringLiteral("direct")},
         },
     };
     if (settings.blockQuic) {
-        outbounds.append(QJsonObject{
-            {QStringLiteral("tag"), QStringLiteral("blocked")},
-            {QStringLiteral("protocol"), QStringLiteral("blackhole")},
-        });
         rules.append(QJsonObject{
             {QStringLiteral("type"), QStringLiteral("field")},
             {QStringLiteral("network"), QStringLiteral("udp")},
@@ -90,6 +112,23 @@ QJsonObject XrayConfigBuilder::build(const VlessProfile &profile,
 
     return {
         {QStringLiteral("log"), QJsonObject{{QStringLiteral("loglevel"), QStringLiteral("warning")}}},
+        {QStringLiteral("dns"), QJsonObject{
+             {QStringLiteral("servers"), QJsonArray{
+                  QJsonObject{
+                      {QStringLiteral("address"), QStringLiteral("localhost")},
+                      {QStringLiteral("domains"), strings({
+                           QStringLiteral("full:%1").arg(profile.server),
+                       })},
+                      {QStringLiteral("queryStrategy"), QStringLiteral("UseIPv4")},
+                      {QStringLiteral("skipFallback"), true},
+                  },
+                  QJsonObject{
+                      {QStringLiteral("address"), QStringLiteral("https://1.1.1.1/dns-query")},
+                      {QStringLiteral("queryStrategy"), QStringLiteral("UseIPv4")},
+                  },
+              }},
+             {QStringLiteral("queryStrategy"), QStringLiteral("UseIPv4")},
+         }},
         {QStringLiteral("inbounds"), QJsonArray{tunInbound}},
         {QStringLiteral("outbounds"), outbounds},
         {QStringLiteral("routing"), QJsonObject{
@@ -116,10 +155,13 @@ QJsonObject XrayConfigBuilder::buildProxyOutbound(const VlessProfile &profile,
         {QStringLiteral("method"), transportMethod(profile.transport)},
         {QStringLiteral("security"), profile.security},
     };
+    QJsonObject sockopt{
+        {QStringLiteral("domainStrategy"), QStringLiteral("ForceIPv4")},
+    };
     if (!networkInterface.isEmpty()) {
-        streamSettings.insert(QStringLiteral("sockopt"),
-                              QJsonObject{{QStringLiteral("interface"), networkInterface}});
+        sockopt.insert(QStringLiteral("interface"), networkInterface);
     }
+    streamSettings.insert(QStringLiteral("sockopt"), sockopt);
 
     if (profile.security == QStringLiteral("tls")) {
         QJsonObject tls{

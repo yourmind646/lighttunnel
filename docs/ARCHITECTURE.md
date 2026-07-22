@@ -18,9 +18,10 @@ The GUI and core communicate only through a generated configuration and the syst
 state. A small privileged helper lives only as a child of the authenticated GUI and communicates
 over inherited stdin/stdout pipes; it creates no socket and exits on EOF or parent death.
 
-While connected, the GUI measures a TCP handshake to the selected VLESS endpoint every five
-seconds. The probe is asynchronous, has a three-second timeout, and never crosses the privilege
-boundary. It works when ICMP echo is blocked and does not send profile credentials.
+While connected, the GUI measures a TCP handshake through the tunnel to Cloudflare's public IPv4
+resolver every five seconds. Unlike measuring the VLESS endpoint's physical-route exception, this
+includes both VPN and exit latency. The probe is asynchronous, has a three-second timeout, never
+crosses the privilege boundary, works when ICMP echo is blocked, and sends no profile credentials.
 
 ## Privilege boundary
 
@@ -45,11 +46,15 @@ stored by LightTunnel. The generated configuration is validated before this boun
 
 ## Routing defaults
 
-- TUN address: `172.19.0.1/30`; Xray also uses `fdfe:dcba:9876::1/126`
+- TUN addresses: `172.19.0.1/30` and `fdfe:dcba:9876::1/126`
 - stack: `system`
 - MTU: `1500`
-- sing-box hijacks DNS port 53; Xray passes packets through its native TUN
-- private IP destinations use the direct outbound
+- both cores hijack plaintext DNS port 53; AAAA receives an immediate empty response and upstream
+  A lookups use IPv4-only DNS (applications using their own DoH are still constrained by the IPv6
+  reject rule)
+- IPv6 is captured and rejected before routing, preventing physical-interface leaks
+- private IPv4 destinations use the direct outbound
+- DNS answers and VLESS endpoint resolution are restricted to IPv4
 - all remaining traffic uses the selected VLESS outbound
 - outbound traffic is bound to the selected physical interface to prevent a route loop
 - QUIC is allowed unless the user explicitly blocks UDP/443

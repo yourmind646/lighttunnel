@@ -13,7 +13,7 @@ independent and is not affiliated with either upstream project.
 - System-wide TUN with automatic routing and DNS interception.
 - Safe explicit binding of both proxy and direct connections to the physical interface.
 - KDE/GNOME tray, connect/disconnect actions and start minimized.
-- Live TCP latency to the selected VPN endpoint, refreshed every five seconds.
+- Live end-to-end TCP latency through the VPN tunnel, refreshed every five seconds.
 - Freedesktop autostart.
 - Live `journalctl` logs inside the application.
 - sing-box/Xray version display and verified automatic updates from official GitHub Releases.
@@ -171,8 +171,9 @@ For a threat model and design details, see [docs/ARCHITECTURE.md](docs/ARCHITECT
   sing-box.
 - Native Xray TUN auto-routing requires Xray 26.5.9 or newer. LightTunnel follows the official
   Xray rolling channel because GitHub's “latest stable” endpoint remains on the broken 26.3.27.
-- The sing-box backend currently uses an IPv4-only TUN and restricts DNS responses to IPv4. Xray's
-  native TUN routes both IPv4 and IPv6 through the server.
+- Both backends capture IPv6 locally and reject it inside the tunnel to prevent direct leaks. DNS
+  answers and connections to the selected VLESS endpoint are forced to IPv4; proxied payload is
+  therefore limited to IPv4 TCP/UDP.
 - Subscription import is currently one-shot; periodic background refresh and QR scanning are planned.
 - GNOME may require an AppIndicator/status notifier shell extension for full tray interaction.
 - Profiles are protected by filesystem permissions, not by KWallet/Secret Service encryption yet.

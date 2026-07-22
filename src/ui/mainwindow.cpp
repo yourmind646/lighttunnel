@@ -224,31 +224,21 @@ void MainWindow::applyState(SystemdCoreManager::State state)
 
     QString stateProperty = QStringLiteral("disconnected");
     StatusIndicator::Mode indicatorMode = StatusIndicator::Mode::Disconnected;
-    QString badgeText = QStringLiteral("ГОТОВ К ЗАПУСКУ");
     if (state == SystemdCoreManager::State::Connected) {
         stateProperty = QStringLiteral("connected");
         indicatorMode = StatusIndicator::Mode::Connected;
-        badgeText = QStringLiteral("TUN АКТИВЕН");
     } else if (state == SystemdCoreManager::State::Starting
                || state == SystemdCoreManager::State::Stopping) {
         stateProperty = QStringLiteral("busy");
         indicatorMode = StatusIndicator::Mode::Busy;
-        badgeText = state == SystemdCoreManager::State::Starting
-            ? QStringLiteral("ПОДКЛЮЧЕНИЕ")
-            : QStringLiteral("ОТКЛЮЧЕНИЕ");
     } else if (state == SystemdCoreManager::State::Error) {
         stateProperty = QStringLiteral("error");
         indicatorMode = StatusIndicator::Mode::Error;
-        badgeText = QStringLiteral("ТРЕБУЕТ ВНИМАНИЯ");
     }
     m_statusIndicator->setMode(indicatorMode);
-    m_statusBadge->setText(badgeText);
-    m_statusBadge->setProperty("connectionState", stateProperty);
     m_statusCard->setProperty("connectionState", stateProperty);
-    for (QWidget *widget : {static_cast<QWidget *>(m_statusBadge), static_cast<QWidget *>(m_statusCard)}) {
-        widget->style()->unpolish(widget);
-        widget->style()->polish(widget);
-    }
+    m_statusCard->style()->unpolish(m_statusCard);
+    m_statusCard->style()->polish(m_statusCard);
 
     const bool busy = state == SystemdCoreManager::State::Starting
         || state == SystemdCoreManager::State::Stopping;
@@ -265,9 +255,9 @@ void MainWindow::applyState(SystemdCoreManager::State state)
         m_statusSubtitle->setText(QStringLiteral("Весь системный трафик проходит через защищённый TUN"));
         m_trayConnectAction->setText(QStringLiteral("Отключиться"));
         m_trayIcon->setToolTip(QStringLiteral("LightTunnel — подключено"));
-        if (const VlessProfile *profile = selectedProfile(); profile != nullptr) {
-            m_latencyMonitor.start(profile->server, profile->serverPort);
-        }
+        // This public IPv4 address is intentionally reached through the TUN. Measuring the
+        // VLESS endpoint itself would only measure its physical-route exception.
+        m_latencyMonitor.start(QStringLiteral("1.1.1.1"), 443);
     } else if (busy) {
         m_connectButton->setText(state == SystemdCoreManager::State::Starting
                                      ? QStringLiteral("Подключение…")
@@ -406,20 +396,13 @@ void MainWindow::buildUi()
     statusRow->addWidget(m_statusIndicator, 0, Qt::AlignVCenter);
     statusRow->addLayout(statusTexts);
     statusRow->addStretch();
-    m_statusBadge = new QLabel(m_statusCard);
-    m_statusBadge->setObjectName(QStringLiteral("statusBadge"));
-    m_statusBadge->setAlignment(Qt::AlignCenter);
-    auto *statusBadges = new QVBoxLayout;
-    statusBadges->setSpacing(7);
-    statusBadges->addWidget(m_statusBadge, 0, Qt::AlignRight);
     m_latencyBadge = new QLabel(QStringLiteral("PING —"), m_statusCard);
     m_latencyBadge->setObjectName(QStringLiteral("latencyBadge"));
     m_latencyBadge->setProperty("latencyQuality", QStringLiteral("unavailable"));
     m_latencyBadge->setAlignment(Qt::AlignCenter);
     m_latencyBadge->setToolTip(
-        QStringLiteral("Задержка TCP-подключения до выбранного VPN-сервера"));
-    statusBadges->addWidget(m_latencyBadge, 0, Qt::AlignRight);
-    statusRow->addLayout(statusBadges);
+        QStringLiteral("Задержка TCP-подключения через VPN-туннель до 1.1.1.1"));
+    statusRow->addWidget(m_latencyBadge, 0, Qt::AlignTop);
     statusLayout->addLayout(statusRow);
 
     auto *profileRow = new QHBoxLayout;

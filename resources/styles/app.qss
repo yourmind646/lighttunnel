@@ -21,34 +21,6 @@ QLabel#statusTitle {
     color: #ffffff;
 }
 
-QLabel#statusBadge {
-    background: #1b253a;
-    border: 1px solid #34415f;
-    border-radius: 11px;
-    color: #9aa6ba;
-    font-size: 8.5pt;
-    font-weight: 700;
-    padding: 5px 10px;
-}
-
-QLabel#statusBadge[connectionState="connected"] {
-    background: #12332f;
-    border-color: #246a5d;
-    color: #6ee7b7;
-}
-
-QLabel#statusBadge[connectionState="busy"] {
-    background: #352b15;
-    border-color: #6f5720;
-    color: #fcd34d;
-}
-
-QLabel#statusBadge[connectionState="error"] {
-    background: #3c1d28;
-    border-color: #7f3045;
-    color: #fda4af;
-}
-
 QLabel#latencyBadge {
     background: #151f34;
     border: 1px solid #2f3b57;

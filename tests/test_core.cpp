@@ -37,6 +37,8 @@ private slots:
     void parsesXhttpUri();
     void bindsEveryNetworkOutbound();
     void ipv4TunUsesIpv4Dns();
+    void ipv6TrafficIsCapturedAndRejected();
+    void proxyEndpointsResolveOnlyIpv4();
     void quicPolicyIsExplicit();
     void systemdServiceUsesCallingUserWithNetworkCapabilities();
     void xrayRunsAsTheOnlySelectedCore();
@@ -145,6 +147,69 @@ void CoreTests::ipv4TunUsesIpv4Dns()
     QVERIFY(!dns.contains(QStringLiteral("independent_cache")));
 }
 
+void CoreTests::ipv6TrafficIsCapturedAndRejected()
+{
+    VlessProfile profile;
+    profile.uuid = QStringLiteral("11111111-2222-3333-4444-555555555555");
+    profile.server = QStringLiteral("example.com");
+
+    const QJsonObject singBox = SingBoxConfigBuilder::build(
+        profile, AppSettings{}, QStringLiteral("wlan0"));
+    const QJsonObject singTun = singBox.value(QStringLiteral("inbounds")).toArray().at(1).toObject();
+    const QJsonArray singAddresses = singTun.value(QStringLiteral("address")).toArray();
+    QVERIFY(singAddresses.contains(QStringLiteral("fdfe:dcba:9876::1/126")));
+    const QJsonArray singRules = singBox.value(QStringLiteral("route")).toObject()
+                                     .value(QStringLiteral("rules")).toArray();
+    QCOMPARE(singRules.at(1).toObject().value(QStringLiteral("ip_version")).toInt(), 6);
+    QCOMPARE(singRules.at(1).toObject().value(QStringLiteral("action")).toString(),
+             QStringLiteral("reject"));
+
+    const QJsonObject xray = XrayConfigBuilder::build(
+        profile, AppSettings{}, QStringLiteral("wlan0"));
+    const QJsonObject xrayTun = xray.value(QStringLiteral("inbounds")).toArray().first().toObject()
+                                    .value(QStringLiteral("settings")).toObject();
+    QVERIFY(xrayTun.value(QStringLiteral("autoSystemRoutingTable")).toArray()
+                .contains(QStringLiteral("::/0")));
+    const QJsonArray xrayRules = xray.value(QStringLiteral("routing")).toObject()
+                                     .value(QStringLiteral("rules")).toArray();
+    QCOMPARE(xrayRules.first().toObject().value(QStringLiteral("port")).toString(),
+             QStringLiteral("53"));
+    QCOMPARE(xrayRules.first().toObject().value(QStringLiteral("outboundTag")).toString(),
+             QStringLiteral("dns-out"));
+    const QJsonObject ipv6Rule = xrayRules.at(1).toObject();
+    QVERIFY(ipv6Rule.value(QStringLiteral("ip")).toArray().contains(QStringLiteral("::/0")));
+    QCOMPARE(ipv6Rule.value(QStringLiteral("outboundTag")).toString(), QStringLiteral("blocked"));
+}
+
+void CoreTests::proxyEndpointsResolveOnlyIpv4()
+{
+    VlessProfile profile;
+    profile.uuid = QStringLiteral("11111111-2222-3333-4444-555555555555");
+    profile.server = QStringLiteral("example.com");
+
+    const QJsonObject singProxy = SingBoxConfigBuilder::build(
+        profile, AppSettings{}, QStringLiteral("wlan0"))
+                                      .value(QStringLiteral("outbounds")).toArray().first().toObject();
+    QCOMPARE(singProxy.value(QStringLiteral("domain_resolver")).toObject()
+                 .value(QStringLiteral("strategy")).toString(), QStringLiteral("ipv4_only"));
+
+    const QJsonObject xray = XrayConfigBuilder::build(
+        profile, AppSettings{}, QStringLiteral("wlan0"));
+    QCOMPARE(xray.value(QStringLiteral("dns")).toObject()
+                 .value(QStringLiteral("queryStrategy")).toString(), QStringLiteral("UseIPv4"));
+    const QJsonArray xrayOutbounds = xray.value(QStringLiteral("outbounds")).toArray();
+    const QJsonObject dnsOutbound = xrayOutbounds.at(3).toObject();
+    QCOMPARE(dnsOutbound.value(QStringLiteral("protocol")).toString(), QStringLiteral("dns"));
+    const QJsonObject aaaaRule = dnsOutbound.value(QStringLiteral("settings")).toObject()
+                                     .value(QStringLiteral("rules")).toArray().first().toObject();
+    QCOMPARE(aaaaRule.value(QStringLiteral("qType")).toInt(), 28);
+    QCOMPARE(aaaaRule.value(QStringLiteral("action")).toString(), QStringLiteral("return"));
+    const QJsonObject xrayProxy = xray.value(QStringLiteral("outbounds")).toArray().first().toObject();
+    QCOMPARE(xrayProxy.value(QStringLiteral("streamSettings")).toObject()
+                 .value(QStringLiteral("sockopt")).toObject()
+                 .value(QStringLiteral("domainStrategy")).toString(), QStringLiteral("ForceIPv4"));
+}
+
 void CoreTests::quicPolicyIsExplicit()
 {
     VlessProfile profile;
@@ -157,7 +222,7 @@ void CoreTests::quicPolicyIsExplicit()
                            .toObject()
                            .value(QStringLiteral("rules"))
                            .toArray();
-    QCOMPARE(rules.size(), 3);
+    QCOMPARE(rules.size(), 4);
 
     settings.blockQuic = true;
     rules = SingBoxConfigBuilder::build(profile, settings, QStringLiteral("wlan0"))
@@ -165,7 +230,7 @@ void CoreTests::quicPolicyIsExplicit()
                 .toObject()
                 .value(QStringLiteral("rules"))
                 .toArray();
-    QCOMPARE(rules.size(), 4);
+    QCOMPARE(rules.size(), 5);
     QCOMPARE(rules.last().toObject().value(QStringLiteral("action")).toString(), QStringLiteral("reject"));
 }
 
@@ -217,8 +282,8 @@ void CoreTests::xrayKeepsServerRoutingAuthoritative()
              QStringLiteral("proxy"));
     const QJsonArray rules = config.value(QStringLiteral("routing")).toObject()
                                  .value(QStringLiteral("rules")).toArray();
-    QCOMPARE(rules.size(), 1);
-    QVERIFY(!rules.first().toObject().contains(QStringLiteral("domain")));
+    QCOMPARE(rules.size(), 3);
+    QVERIFY(!rules.at(2).toObject().contains(QStringLiteral("domain")));
 
     const QJsonObject sniffing = config.value(QStringLiteral("inbounds")).toArray().first().toObject()
                                       .value(QStringLiteral("sniffing")).toObject();
