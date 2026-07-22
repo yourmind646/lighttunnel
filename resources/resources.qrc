@@ -1,7 +1,6 @@
 <RCC>
   <qresource prefix="/icons">
     <file alias="lighttunnel.svg">icons/lighttunnel.svg</file>
-    <file alias="lighttunnel-tray.svg">icons/lighttunnel-tray.svg</file>
     <file alias="chevron-down.svg">icons/chevron-down.svg</file>
   </qresource>
   <qresource prefix="/styles">

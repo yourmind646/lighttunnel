@@ -429,11 +429,8 @@ void MainWindow::buildUi()
 
 void MainWindow::buildTray()
 {
-    QIcon trayIcon = QIcon::fromTheme(QStringLiteral("network-vpn"));
-    if (trayIcon.isNull()) {
-        trayIcon = QIcon(QStringLiteral(":/icons/lighttunnel-tray.svg"));
-    }
-    m_trayIcon = new QSystemTrayIcon(trayIcon, this);
+    m_trayIcon = new QSystemTrayIcon(
+        QIcon(QStringLiteral(":/icons/lighttunnel.svg")), this);
     auto *menu = new QMenu(this);
     auto *showAction = menu->addAction(QStringLiteral("Открыть LightTunnel"));
     m_trayConnectAction = menu->addAction(QStringLiteral("Подключиться"));

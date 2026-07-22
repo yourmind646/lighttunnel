@@ -27,6 +27,7 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName(QStringLiteral("LightTunnel"));
     QApplication::setApplicationDisplayName(QStringLiteral("LightTunnel"));
     QApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QApplication::setDesktopFileName(QStringLiteral("io.github.lighttunnel.LightTunnel"));
     QApplication::setQuitOnLastWindowClosed(false);
     application.setWindowIcon(QIcon(QStringLiteral(":/icons/lighttunnel.svg")));
     application.setStyleSheet(loadStyleSheet());
