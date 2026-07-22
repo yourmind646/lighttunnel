@@ -18,10 +18,12 @@ The GUI and core communicate only through a generated configuration and the syst
 state. A small privileged helper lives only as a child of the authenticated GUI and communicates
 over inherited stdin/stdout pipes; it creates no socket and exits on EOF or parent death.
 
-While connected, the GUI measures a TCP handshake through the tunnel to Cloudflare's public IPv4
-resolver every five seconds. Unlike measuring the VLESS endpoint's physical-route exception, this
-includes both VPN and exit latency. The probe is asynchronous, has a three-second timeout, never
-crosses the privilege boundary, works when ICMP echo is blocked, and sends no profile credentials.
+While connected, the GUI performs a SOCKS5 CONNECT through the selected core's loopback-only mixed
+inbound to Cloudflare's public IPv4 resolver every five seconds. Unlike a normal socket that may
+follow a physical-route exception, this cannot report success without traversing the VLESS
+outbound, so it includes both VPN and exit latency. The probe is asynchronous, has a three-second
+timeout, never crosses the privilege boundary, works when ICMP echo is blocked, and sends no
+profile credentials.
 
 ## Privilege boundary
 
@@ -52,7 +54,8 @@ stored by LightTunnel. The generated configuration is validated before this boun
 - both cores hijack plaintext DNS port 53; AAAA receives an immediate empty response and upstream
   A lookups use IPv4-only DNS (applications using their own DoH are still constrained by the IPv6
   reject rule)
-- IPv6 is captured and rejected before routing, preventing physical-interface leaks
+- when IPv4-only is enabled (the default), IPv6 is captured and rejected before routing,
+  preventing physical-interface leaks; disabling the visible setting restores dual-stack routing
 - private IPv4 destinations use the direct outbound
 - DNS answers and VLESS endpoint resolution are restricted to IPv4
 - all remaining traffic uses the selected VLESS outbound

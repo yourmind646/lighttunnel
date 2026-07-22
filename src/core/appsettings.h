@@ -21,6 +21,7 @@ struct AppSettings final {
     QString tunStack{QStringLiteral("system")};
     int mtu{1500};
     bool blockQuic{false};
+    bool forceIpv4{true};
     bool startMinimized{false};
     bool autoConnect{false};
     bool autostart{false};

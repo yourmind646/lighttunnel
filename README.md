@@ -14,6 +14,8 @@ independent and is not affiliated with either upstream project.
 - Safe explicit binding of both proxy and direct connections to the physical interface.
 - KDE/GNOME tray, connect/disconnect actions and start minimized.
 - Live end-to-end TCP latency through the VPN tunnel, refreshed every five seconds.
+- Visible IPv4-only switch: suppresses AAAA, forces the core endpoint to IPv4, and rejects captured
+  IPv6 without allowing a physical-interface leak.
 - Freedesktop autostart.
 - Live `journalctl` logs inside the application.
 - sing-box/Xray version display and verified automatic updates from official GitHub Releases.

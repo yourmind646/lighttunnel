@@ -33,6 +33,7 @@ HEADERS += \
     src/core/autostartmanager.h \
     src/core/coreupdatemanager.h \
     src/core/latencymonitor.h \
+    src/core/networkconstants.h \
     src/core/privilegedhelper.h \
     src/core/profilerepository.h \
     src/core/singboxconfigbuilder.h \

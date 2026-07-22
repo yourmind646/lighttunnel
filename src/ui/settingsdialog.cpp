@@ -88,6 +88,11 @@ SettingsDialog::SettingsDialog(const AppSettings &settings, QWidget *parent)
 
     m_blockQuic = new QCheckBox(QStringLiteral("Блокировать QUIC (UDP/443) и принудительно использовать TCP"), this);
     m_blockQuic->setChecked(settings.blockQuic);
+    m_forceIpv4 = new QCheckBox(
+        QStringLiteral("Принудительно использовать только IPv4 (TCP/UDP)"), this);
+    m_forceIpv4->setChecked(settings.forceIpv4);
+    m_forceIpv4->setToolTip(QStringLiteral(
+        "DNS возвращает только IPv4, а IPv6 захватывается TUN и блокируется без утечки"));
     m_startMinimized = new QCheckBox(QStringLiteral("Запускать свёрнутым в трей"), this);
     m_startMinimized->setChecked(settings.startMinimized);
     m_autoConnect = new QCheckBox(QStringLiteral("Подключаться к последнему профилю автоматически"), this);
@@ -99,6 +104,7 @@ SettingsDialog::SettingsDialog(const AppSettings &settings, QWidget *parent)
     m_autoUpdateCore->setChecked(settings.autoUpdateCore);
 
     mainLayout->addWidget(m_blockQuic);
+    mainLayout->addWidget(m_forceIpv4);
     mainLayout->addWidget(m_startMinimized);
     mainLayout->addWidget(m_autoConnect);
     mainLayout->addWidget(m_autostart);
@@ -135,6 +141,7 @@ AppSettings SettingsDialog::settings() const
     value.tunStack = m_stack->currentData().toString();
     value.mtu = m_mtu->value();
     value.blockQuic = m_blockQuic->isChecked();
+    value.forceIpv4 = m_forceIpv4->isChecked();
     value.startMinimized = m_startMinimized->isChecked();
     value.autoConnect = m_autoConnect->isChecked();
     value.autostart = m_autostart->isChecked();

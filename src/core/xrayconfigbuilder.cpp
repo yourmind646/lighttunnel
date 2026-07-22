@@ -1,5 +1,6 @@
 #include "core/xrayconfigbuilder.h"
 
+#include "core/networkconstants.h"
 #include "core/singboxconfigbuilder.h"
 
 #include <QJsonArray>
@@ -54,8 +55,18 @@ QJsonObject XrayConfigBuilder::build(const VlessProfile &profile,
              {QStringLiteral("routeOnly"), false},
          }},
     };
+    const QJsonObject socksInbound{
+        {QStringLiteral("tag"), QStringLiteral("socks-in")},
+        {QStringLiteral("protocol"), QStringLiteral("socks")},
+        {QStringLiteral("listen"), QStringLiteral("127.0.0.1")},
+        {QStringLiteral("port"), LocalSocksPort},
+        {QStringLiteral("settings"), QJsonObject{
+             {QStringLiteral("auth"), QStringLiteral("noauth")},
+             {QStringLiteral("udp"), false},
+         }},
+    };
 
-    QJsonArray outbounds{buildProxyOutbound(profile, networkInterface)};
+    QJsonArray outbounds{buildProxyOutbound(profile, settings.forceIpv4, networkInterface)};
     outbounds.append(QJsonObject{
         {QStringLiteral("tag"), QStringLiteral("direct")},
         {QStringLiteral("protocol"), QStringLiteral("freedom")},
@@ -64,17 +75,19 @@ QJsonObject XrayConfigBuilder::build(const VlessProfile &profile,
         {QStringLiteral("tag"), QStringLiteral("blocked")},
         {QStringLiteral("protocol"), QStringLiteral("blackhole")},
     });
+    QJsonArray dnsOutboundRules;
+    if (settings.forceIpv4) {
+        dnsOutboundRules.append(QJsonObject{
+            {QStringLiteral("action"), QStringLiteral("return")},
+            {QStringLiteral("qType"), 28},
+            {QStringLiteral("rCode"), 0},
+        });
+    }
     outbounds.append(QJsonObject{
         {QStringLiteral("tag"), QStringLiteral("dns-out")},
         {QStringLiteral("protocol"), QStringLiteral("dns")},
         {QStringLiteral("settings"), QJsonObject{
-             {QStringLiteral("rules"), QJsonArray{
-                  QJsonObject{
-                      {QStringLiteral("action"), QStringLiteral("return")},
-                      {QStringLiteral("qType"), 28},
-                      {QStringLiteral("rCode"), 0},
-                  },
-              }},
+             {QStringLiteral("rules"), dnsOutboundRules},
          }},
     });
 
@@ -87,11 +100,6 @@ QJsonObject XrayConfigBuilder::build(const VlessProfile &profile,
         },
         QJsonObject{
             {QStringLiteral("type"), QStringLiteral("field")},
-            {QStringLiteral("ip"), strings({QStringLiteral("::/0")})},
-            {QStringLiteral("outboundTag"), QStringLiteral("blocked")},
-        },
-        QJsonObject{
-            {QStringLiteral("type"), QStringLiteral("field")},
             {QStringLiteral("ip"), strings({
                  QStringLiteral("0.0.0.0/8"), QStringLiteral("10.0.0.0/8"),
                  QStringLiteral("100.64.0.0/10"), QStringLiteral("127.0.0.0/8"),
@@ -101,6 +109,13 @@ QJsonObject XrayConfigBuilder::build(const VlessProfile &profile,
             {QStringLiteral("outboundTag"), QStringLiteral("direct")},
         },
     };
+    if (settings.forceIpv4) {
+        rules.insert(1, QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("field")},
+            {QStringLiteral("ip"), strings({QStringLiteral("::/0")})},
+            {QStringLiteral("outboundTag"), QStringLiteral("blocked")},
+        });
+    }
     if (settings.blockQuic) {
         rules.append(QJsonObject{
             {QStringLiteral("type"), QStringLiteral("field")},
@@ -119,17 +134,20 @@ QJsonObject XrayConfigBuilder::build(const VlessProfile &profile,
                       {QStringLiteral("domains"), strings({
                            QStringLiteral("full:%1").arg(profile.server),
                        })},
-                      {QStringLiteral("queryStrategy"), QStringLiteral("UseIPv4")},
+                      {QStringLiteral("queryStrategy"), settings.forceIpv4
+                           ? QStringLiteral("UseIPv4") : QStringLiteral("UseIP")},
                       {QStringLiteral("skipFallback"), true},
                   },
                   QJsonObject{
                       {QStringLiteral("address"), QStringLiteral("https://1.1.1.1/dns-query")},
-                      {QStringLiteral("queryStrategy"), QStringLiteral("UseIPv4")},
+                      {QStringLiteral("queryStrategy"), settings.forceIpv4
+                           ? QStringLiteral("UseIPv4") : QStringLiteral("UseIP")},
                   },
               }},
-             {QStringLiteral("queryStrategy"), QStringLiteral("UseIPv4")},
+             {QStringLiteral("queryStrategy"), settings.forceIpv4
+                  ? QStringLiteral("UseIPv4") : QStringLiteral("UseIP")},
          }},
-        {QStringLiteral("inbounds"), QJsonArray{tunInbound}},
+        {QStringLiteral("inbounds"), QJsonArray{tunInbound, socksInbound}},
         {QStringLiteral("outbounds"), outbounds},
         {QStringLiteral("routing"), QJsonObject{
              {QStringLiteral("domainStrategy"), QStringLiteral("AsIs")},
@@ -139,6 +157,7 @@ QJsonObject XrayConfigBuilder::build(const VlessProfile &profile,
 }
 
 QJsonObject XrayConfigBuilder::buildProxyOutbound(const VlessProfile &profile,
+                                                  bool forceIpv4,
                                                   const QString &networkInterface)
 {
     QJsonObject settings{
@@ -156,7 +175,8 @@ QJsonObject XrayConfigBuilder::buildProxyOutbound(const VlessProfile &profile,
         {QStringLiteral("security"), profile.security},
     };
     QJsonObject sockopt{
-        {QStringLiteral("domainStrategy"), QStringLiteral("ForceIPv4")},
+        {QStringLiteral("domainStrategy"), forceIpv4
+             ? QStringLiteral("ForceIPv4") : QStringLiteral("UseIP")},
     };
     if (!networkInterface.isEmpty()) {
         sockopt.insert(QStringLiteral("interface"), networkInterface);

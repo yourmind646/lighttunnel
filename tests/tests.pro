@@ -21,6 +21,7 @@ HEADERS += \
     ../src/core/appsettings.h \
     ../src/core/coreupdatemanager.h \
     ../src/core/latencymonitor.h \
+    ../src/core/networkconstants.h \
     ../src/core/privilegedhelper.h \
     ../src/core/singboxconfigbuilder.h \
     ../src/core/xrayconfigbuilder.h \

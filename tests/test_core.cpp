@@ -13,10 +13,14 @@
 #include <QProcess>
 #include <QSignalSpy>
 #include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 #include <unistd.h>
+
+#include <memory>
 
 using lighttunnel::AppSettings;
 using lighttunnel::CoreUpdateManager;
@@ -39,6 +43,8 @@ private slots:
     void ipv4TunUsesIpv4Dns();
     void ipv6TrafficIsCapturedAndRejected();
     void proxyEndpointsResolveOnlyIpv4();
+    void ipv4OnlyModeCanBeDisabled();
+    void latencyProbeHasLocalSocksInbound();
     void quicPolicyIsExplicit();
     void systemdServiceUsesCallingUserWithNetworkCapabilities();
     void xrayRunsAsTheOnlySelectedCore();
@@ -50,6 +56,7 @@ private slots:
     void privilegedHelperBuildsOnlyConstrainedCommands();
     void privilegedHelperRejectsInsecureInput();
     void measuresEndpointLatencyWithoutIcmp();
+    void measuresLatencyAfterSocksHandshake();
     void generatedConfigPassesSingBoxCheck();
     void generatedConfigPassesXrayCheck();
 };
@@ -71,6 +78,45 @@ void CoreTests::measuresEndpointLatencyWithoutIcmp()
 
     monitor.stop();
     QCOMPARE(measurements.constLast().constFirst().toInt(), -1);
+}
+
+void CoreTests::measuresLatencyAfterSocksHandshake()
+{
+    QTcpServer proxy;
+    if (!proxy.listen(QHostAddress::LocalHost)) {
+        QSKIP("Loopback TCP sockets are unavailable in this build sandbox");
+    }
+
+    connect(&proxy, &QTcpServer::newConnection, this, [&proxy] {
+        QTcpSocket *socket = proxy.nextPendingConnection();
+        auto state = std::make_shared<int>(0);
+        auto buffer = std::make_shared<QByteArray>();
+        connect(socket, &QTcpSocket::readyRead, socket, [socket, state, buffer] {
+            buffer->append(socket->readAll());
+            if (*state == 0 && buffer->size() >= 3) {
+                buffer->clear();
+                *state = 1;
+                socket->write(QByteArray::fromHex("0500"));
+                return;
+            }
+            if (*state == 1 && buffer->size() >= 10) {
+                *state = 2;
+                QTimer::singleShot(80, socket, [socket] {
+                    socket->write(QByteArray::fromHex("050000017f00000101bb"));
+                });
+            }
+        });
+    });
+
+    LatencyMonitor monitor;
+    QSignalSpy measurements(&monitor, &LatencyMonitor::latencyChanged);
+    monitor.startViaSocks(QStringLiteral("127.0.0.1"), proxy.serverPort(),
+                          QStringLiteral("1.1.1.1"), 443);
+
+    QTRY_VERIFY_WITH_TIMEOUT(
+        !measurements.isEmpty() && measurements.constLast().constFirst().toInt() >= 60,
+        1000);
+    QVERIFY(measurements.constLast().constFirst().toInt() < 500);
 }
 
 void CoreTests::parsesRealityUri()
@@ -208,6 +254,64 @@ void CoreTests::proxyEndpointsResolveOnlyIpv4()
     QCOMPARE(xrayProxy.value(QStringLiteral("streamSettings")).toObject()
                  .value(QStringLiteral("sockopt")).toObject()
                  .value(QStringLiteral("domainStrategy")).toString(), QStringLiteral("ForceIPv4"));
+}
+
+void CoreTests::ipv4OnlyModeCanBeDisabled()
+{
+    VlessProfile profile;
+    profile.uuid = QStringLiteral("11111111-2222-3333-4444-555555555555");
+    profile.server = QStringLiteral("example.com");
+    AppSettings settings;
+    settings.forceIpv4 = false;
+
+    const QJsonObject singBox = SingBoxConfigBuilder::build(
+        profile, settings, QStringLiteral("wlan0"));
+    QCOMPARE(singBox.value(QStringLiteral("dns")).toObject()
+                 .value(QStringLiteral("strategy")).toString(), QStringLiteral("prefer_ipv4"));
+    const QJsonArray singRules = singBox.value(QStringLiteral("route")).toObject()
+                                     .value(QStringLiteral("rules")).toArray();
+    for (const QJsonValue &value : singRules) {
+        QVERIFY(value.toObject().value(QStringLiteral("ip_version")).toInt() != 6);
+    }
+
+    const QJsonObject xray = XrayConfigBuilder::build(
+        profile, settings, QStringLiteral("wlan0"));
+    QCOMPARE(xray.value(QStringLiteral("dns")).toObject()
+                 .value(QStringLiteral("queryStrategy")).toString(), QStringLiteral("UseIP"));
+    const QJsonArray xrayRules = xray.value(QStringLiteral("routing")).toObject()
+                                     .value(QStringLiteral("rules")).toArray();
+    for (const QJsonValue &value : xrayRules) {
+        QVERIFY(!value.toObject().value(QStringLiteral("ip")).toArray()
+                     .contains(QStringLiteral("::/0")));
+    }
+    const QJsonObject dnsOutbound = xray.value(QStringLiteral("outbounds")).toArray().at(3).toObject();
+    QVERIFY(dnsOutbound.value(QStringLiteral("settings")).toObject()
+                .value(QStringLiteral("rules")).toArray().isEmpty());
+    QCOMPARE(xray.value(QStringLiteral("outbounds")).toArray().first().toObject()
+                 .value(QStringLiteral("streamSettings")).toObject()
+                 .value(QStringLiteral("sockopt")).toObject()
+                 .value(QStringLiteral("domainStrategy")).toString(), QStringLiteral("UseIP"));
+}
+
+void CoreTests::latencyProbeHasLocalSocksInbound()
+{
+    VlessProfile profile;
+    profile.uuid = QStringLiteral("11111111-2222-3333-4444-555555555555");
+    profile.server = QStringLiteral("example.com");
+
+    const QJsonObject singInbound = SingBoxConfigBuilder::build(
+        profile, AppSettings{}, QStringLiteral("wlan0"))
+                                        .value(QStringLiteral("inbounds")).toArray().first().toObject();
+    QCOMPARE(singInbound.value(QStringLiteral("type")).toString(), QStringLiteral("mixed"));
+    QCOMPARE(singInbound.value(QStringLiteral("listen")).toString(), QStringLiteral("127.0.0.1"));
+    QCOMPARE(singInbound.value(QStringLiteral("listen_port")).toInt(), 2080);
+
+    const QJsonObject xrayInbound = XrayConfigBuilder::build(
+        profile, AppSettings{}, QStringLiteral("wlan0"))
+                                        .value(QStringLiteral("inbounds")).toArray().at(1).toObject();
+    QCOMPARE(xrayInbound.value(QStringLiteral("protocol")).toString(), QStringLiteral("socks"));
+    QCOMPARE(xrayInbound.value(QStringLiteral("listen")).toString(), QStringLiteral("127.0.0.1"));
+    QCOMPARE(xrayInbound.value(QStringLiteral("port")).toInt(), 2080);
 }
 
 void CoreTests::quicPolicyIsExplicit()

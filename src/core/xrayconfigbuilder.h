@@ -18,6 +18,7 @@ public:
 
 private:
     [[nodiscard]] static QJsonObject buildProxyOutbound(const VlessProfile &profile,
+                                                        bool forceIpv4,
                                                         const QString &networkInterface);
 };
 

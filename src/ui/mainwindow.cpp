@@ -1,6 +1,7 @@
 #include "ui/mainwindow.h"
 
 #include "core/autostartmanager.h"
+#include "core/networkconstants.h"
 #include "ui/opaquecombobox.h"
 #include "ui/profilemanagerdialog.h"
 #include "ui/settingsdialog.h"
@@ -257,7 +258,8 @@ void MainWindow::applyState(SystemdCoreManager::State state)
         m_trayIcon->setToolTip(QStringLiteral("LightTunnel — подключено"));
         // This public IPv4 address is intentionally reached through the TUN. Measuring the
         // VLESS endpoint itself would only measure its physical-route exception.
-        m_latencyMonitor.start(QStringLiteral("1.1.1.1"), 443);
+        m_latencyMonitor.startViaSocks(QStringLiteral("127.0.0.1"), LocalSocksPort,
+                                       QStringLiteral("1.1.1.1"), 443);
     } else if (busy) {
         m_connectButton->setText(state == SystemdCoreManager::State::Starting
                                      ? QStringLiteral("Подключение…")

@@ -1,5 +1,7 @@
 #include "core/singboxconfigbuilder.h"
 
+#include "core/networkconstants.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileDevice>
@@ -50,14 +52,15 @@ QJsonObject SingBoxConfigBuilder::build(const VlessProfile &profile,
     const QJsonObject dns{
         {QStringLiteral("servers"), QJsonArray{remoteDns, localDns}},
         {QStringLiteral("final"), QStringLiteral("remote_dns")},
-        {QStringLiteral("strategy"), QStringLiteral("ipv4_only")},
+        {QStringLiteral("strategy"), settings.forceIpv4
+             ? QStringLiteral("ipv4_only") : QStringLiteral("prefer_ipv4")},
     };
 
     const QJsonObject mixedInbound{
         {QStringLiteral("type"), QStringLiteral("mixed")},
         {QStringLiteral("tag"), QStringLiteral("mixed-in")},
         {QStringLiteral("listen"), QStringLiteral("127.0.0.1")},
-        {QStringLiteral("listen_port"), 2080},
+        {QStringLiteral("listen_port"), LocalSocksPort},
     };
     const QJsonObject tunInbound{
         {QStringLiteral("type"), QStringLiteral("tun")},
@@ -85,16 +88,18 @@ QJsonObject SingBoxConfigBuilder::build(const VlessProfile &profile,
             {QStringLiteral("port"), 53},
             {QStringLiteral("action"), QStringLiteral("hijack-dns")},
         },
-        QJsonObject{
-            {QStringLiteral("ip_version"), 6},
-            {QStringLiteral("action"), QStringLiteral("reject")},
-        },
         QJsonObject{{QStringLiteral("action"), QStringLiteral("sniff")}},
         QJsonObject{
             {QStringLiteral("ip_is_private"), true},
             {QStringLiteral("outbound"), QStringLiteral("direct")},
         },
     };
+    if (settings.forceIpv4) {
+        routeRules.insert(1, QJsonObject{
+            {QStringLiteral("ip_version"), 6},
+            {QStringLiteral("action"), QStringLiteral("reject")},
+        });
+    }
     if (settings.blockQuic) {
         routeRules.append(QJsonObject{
             {QStringLiteral("network"), QStringLiteral("udp")},
@@ -117,7 +122,7 @@ QJsonObject SingBoxConfigBuilder::build(const VlessProfile &profile,
         {QStringLiteral("dns"), dns},
         {QStringLiteral("inbounds"), QJsonArray{mixedInbound, tunInbound}},
         {QStringLiteral("outbounds"), QJsonArray{
-             buildProxyOutbound(profile, networkInterface),
+             buildProxyOutbound(profile, settings.forceIpv4, networkInterface),
              directOutbound,
          }},
         {QStringLiteral("route"), route},
@@ -125,6 +130,7 @@ QJsonObject SingBoxConfigBuilder::build(const VlessProfile &profile,
 }
 
 QJsonObject SingBoxConfigBuilder::buildProxyOutbound(const VlessProfile &profile,
+                                                       bool forceIpv4,
                                                        const QString &networkInterface)
 {
     QJsonObject outbound{
@@ -136,7 +142,8 @@ QJsonObject SingBoxConfigBuilder::buildProxyOutbound(const VlessProfile &profile
         {QStringLiteral("packet_encoding"), QStringLiteral("xudp")},
         {QStringLiteral("domain_resolver"), QJsonObject{
              {QStringLiteral("server"), QStringLiteral("local_dns")},
-             {QStringLiteral("strategy"), QStringLiteral("ipv4_only")},
+             {QStringLiteral("strategy"), forceIpv4
+                  ? QStringLiteral("ipv4_only") : QStringLiteral("prefer_ipv4")},
          }},
     };
     if (!profile.flow.isEmpty()) {

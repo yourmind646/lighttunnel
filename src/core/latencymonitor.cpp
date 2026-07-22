@@ -1,6 +1,7 @@
 #include "core/latencymonitor.h"
 
 #include <QAbstractSocket>
+#include <QNetworkProxy>
 #include <QTcpSocket>
 
 namespace lighttunnel {
@@ -22,13 +23,30 @@ LatencyMonitor::LatencyMonitor(QObject *parent)
 
 void LatencyMonitor::start(const QString &host, quint16 port)
 {
+    startInternal({}, 0, host, port);
+}
+
+void LatencyMonitor::startViaSocks(const QString &proxyHost, quint16 proxyPort,
+                                   const QString &host, quint16 port)
+{
+    startInternal(proxyHost, proxyPort, host, port);
+}
+
+void LatencyMonitor::startInternal(const QString &proxyHost, quint16 proxyPort,
+                                   const QString &host, quint16 port)
+{
     const QString normalizedHost = host.trimmed();
-    if (normalizedHost.isEmpty() || port == 0) {
+    const QString normalizedProxyHost = proxyHost.trimmed();
+    if (normalizedHost.isEmpty() || port == 0
+        || (normalizedProxyHost.isEmpty() != (proxyPort == 0))) {
         stop();
         return;
     }
 
-    const bool targetChanged = normalizedHost != m_host || port != m_port;
+    const bool targetChanged = normalizedHost != m_host || port != m_port
+        || normalizedProxyHost != m_proxyHost || proxyPort != m_proxyPort;
+    m_proxyHost = normalizedProxyHost;
+    m_proxyPort = proxyPort;
     m_host = normalizedHost;
     m_port = port;
     if (targetChanged) {
@@ -52,6 +70,8 @@ void LatencyMonitor::stop()
     m_timeoutTimer.stop();
     m_socket->abort();
     m_probeInProgress = false;
+    m_proxyHost.clear();
+    m_proxyPort = 0;
     m_host.clear();
     m_port = 0;
     emit latencyChanged(-1);
@@ -66,6 +86,12 @@ void LatencyMonitor::probe()
     m_probeInProgress = true;
     m_elapsed.restart();
     m_timeoutTimer.start(ProbeTimeoutMs);
+    if (m_proxyHost.isEmpty()) {
+        m_socket->setProxy(QNetworkProxy::NoProxy);
+    } else {
+        m_socket->setProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy,
+                                         m_proxyHost, m_proxyPort));
+    }
     m_socket->connectToHost(m_host, m_port);
 }
 

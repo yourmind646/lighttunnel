@@ -47,6 +47,7 @@ AppSettings AppSettings::load()
     value.tunStack = settings.value(QStringLiteral("tun/stack"), QStringLiteral("system")).toString();
     value.mtu = settings.value(QStringLiteral("tun/mtu"), 1500).toInt();
     value.blockQuic = settings.value(QStringLiteral("network/blockQuic"), false).toBool();
+    value.forceIpv4 = settings.value(QStringLiteral("network/forceIpv4"), true).toBool();
     value.startMinimized = settings.value(QStringLiteral("ui/startMinimized"), false).toBool();
     value.autoConnect = settings.value(QStringLiteral("connection/autoConnect"), false).toBool();
     value.autostart = settings.value(QStringLiteral("ui/autostart"), false).toBool();
@@ -66,6 +67,7 @@ void AppSettings::save() const
     settings.setValue(QStringLiteral("tun/stack"), tunStack);
     settings.setValue(QStringLiteral("tun/mtu"), mtu);
     settings.setValue(QStringLiteral("network/blockQuic"), blockQuic);
+    settings.setValue(QStringLiteral("network/forceIpv4"), forceIpv4);
     settings.setValue(QStringLiteral("ui/startMinimized"), startMinimized);
     settings.setValue(QStringLiteral("connection/autoConnect"), autoConnect);
     settings.setValue(QStringLiteral("ui/autostart"), autostart);

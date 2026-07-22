@@ -33,6 +33,7 @@ private:
     QComboBox *m_stack{};
     QSpinBox *m_mtu{};
     QCheckBox *m_blockQuic{};
+    QCheckBox *m_forceIpv4{};
     QCheckBox *m_startMinimized{};
     QCheckBox *m_autoConnect{};
     QCheckBox *m_autostart{};
