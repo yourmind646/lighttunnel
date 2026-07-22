@@ -1,6 +1,7 @@
 #include "ui/mainwindow.h"
 
 #include "core/autostartmanager.h"
+#include "ui/opaquecombobox.h"
 #include "ui/profilemanagerdialog.h"
 #include "ui/settingsdialog.h"
 #include "ui/statusindicator.h"
@@ -379,7 +380,7 @@ void MainWindow::buildUi()
     statusLayout->addLayout(statusRow);
 
     auto *profileRow = new QHBoxLayout;
-    m_profileCombo = new QComboBox(m_statusCard);
+    m_profileCombo = new OpaqueComboBox(m_statusCard);
     m_profileCombo->setMinimumHeight(42);
     auto *manageButton = new QPushButton(QStringLiteral("Профили…"), m_statusCard);
     manageButton->setObjectName(QStringLiteral("secondaryButton"));

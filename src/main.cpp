@@ -6,6 +6,7 @@
 #include <QLockFile>
 #include <QMessageBox>
 #include <QStandardPaths>
+#include <QStyleFactory>
 
 namespace {
 
@@ -22,6 +23,7 @@ QString loadStyleSheet()
 int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
+    application.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
     QApplication::setOrganizationName(QStringLiteral("LightTunnel"));
     QApplication::setOrganizationDomain(QStringLiteral("io.github.lighttunnel"));
     QApplication::setApplicationName(QStringLiteral("LightTunnel"));

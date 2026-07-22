@@ -21,6 +21,7 @@ SOURCES += \
     src/core/systemdcoremanager.cpp \
     src/core/vlessprofile.cpp \
     src/ui/mainwindow.cpp \
+    src/ui/opaquecombobox.cpp \
     src/ui/profilemanagerdialog.cpp \
     src/ui/settingsdialog.cpp \
     src/ui/statusindicator.cpp
@@ -36,6 +37,7 @@ HEADERS += \
     src/core/systemdcoremanager.h \
     src/core/vlessprofile.h \
     src/ui/mainwindow.h \
+    src/ui/opaquecombobox.h \
     src/ui/profilemanagerdialog.h \
     src/ui/settingsdialog.h \
     src/ui/statusindicator.h
