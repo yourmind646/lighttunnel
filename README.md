@@ -13,6 +13,7 @@ independent and is not affiliated with either upstream project.
 - System-wide TUN with automatic routing and DNS interception.
 - Safe explicit binding of both proxy and direct connections to the physical interface.
 - KDE/GNOME tray, connect/disconnect actions and start minimized.
+- Live TCP latency to the selected VPN endpoint, refreshed every five seconds.
 - Freedesktop autostart.
 - Live `journalctl` logs inside the application.
 - sing-box/Xray version display and verified automatic updates from official GitHub Releases.

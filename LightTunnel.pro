@@ -14,6 +14,7 @@ SOURCES += \
     src/core/appsettings.cpp \
     src/core/autostartmanager.cpp \
     src/core/coreupdatemanager.cpp \
+    src/core/latencymonitor.cpp \
     src/core/privilegedhelper.cpp \
     src/core/profilerepository.cpp \
     src/core/singboxconfigbuilder.cpp \
@@ -31,6 +32,7 @@ HEADERS += \
     src/core/appsettings.h \
     src/core/autostartmanager.h \
     src/core/coreupdatemanager.h \
+    src/core/latencymonitor.h \
     src/core/privilegedhelper.h \
     src/core/profilerepository.h \
     src/core/singboxconfigbuilder.h \

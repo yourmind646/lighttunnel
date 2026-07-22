@@ -1,0 +1,97 @@
+#include "core/latencymonitor.h"
+
+#include <QAbstractSocket>
+#include <QTcpSocket>
+
+namespace lighttunnel {
+
+LatencyMonitor::LatencyMonitor(QObject *parent)
+    : QObject(parent)
+    , m_socket(new QTcpSocket(this))
+{
+    m_probeTimer.setInterval(ProbeIntervalMs);
+    m_timeoutTimer.setSingleShot(true);
+
+    connect(&m_probeTimer, &QTimer::timeout, this, &LatencyMonitor::probe);
+    connect(&m_timeoutTimer, &QTimer::timeout, this, &LatencyMonitor::probeFailed);
+    connect(m_socket, &QTcpSocket::connected, this, &LatencyMonitor::probeSucceeded);
+    connect(m_socket, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError) {
+        probeFailed();
+    });
+}
+
+void LatencyMonitor::start(const QString &host, quint16 port)
+{
+    const QString normalizedHost = host.trimmed();
+    if (normalizedHost.isEmpty() || port == 0) {
+        stop();
+        return;
+    }
+
+    const bool targetChanged = normalizedHost != m_host || port != m_port;
+    m_host = normalizedHost;
+    m_port = port;
+    if (targetChanged) {
+        m_socket->abort();
+        m_timeoutTimer.stop();
+        m_probeInProgress = false;
+        emit latencyChanged(-1);
+    }
+
+    if (!m_probeTimer.isActive()) {
+        m_probeTimer.start();
+    }
+    if (!m_probeInProgress) {
+        probe();
+    }
+}
+
+void LatencyMonitor::stop()
+{
+    m_probeTimer.stop();
+    m_timeoutTimer.stop();
+    m_socket->abort();
+    m_probeInProgress = false;
+    m_host.clear();
+    m_port = 0;
+    emit latencyChanged(-1);
+}
+
+void LatencyMonitor::probe()
+{
+    if (m_probeInProgress || m_host.isEmpty() || m_port == 0) {
+        return;
+    }
+
+    m_probeInProgress = true;
+    m_elapsed.restart();
+    m_timeoutTimer.start(ProbeTimeoutMs);
+    m_socket->connectToHost(m_host, m_port);
+}
+
+void LatencyMonitor::probeSucceeded()
+{
+    if (!m_probeInProgress) {
+        return;
+    }
+
+    const int milliseconds = qMax(1, static_cast<int>(m_elapsed.elapsed()));
+    m_probeInProgress = false;
+    m_timeoutTimer.stop();
+    m_socket->abort();
+    emit latencyChanged(milliseconds);
+}
+
+void LatencyMonitor::probeFailed()
+{
+    if (!m_probeInProgress) {
+        return;
+    }
+
+    m_probeInProgress = false;
+    m_timeoutTimer.stop();
+    m_socket->abort();
+    emit latencyChanged(-1);
+}
+
+} // namespace lighttunnel

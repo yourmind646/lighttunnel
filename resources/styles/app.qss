@@ -49,6 +49,34 @@ QLabel#statusBadge[connectionState="error"] {
     color: #fda4af;
 }
 
+QLabel#latencyBadge {
+    background: #151f34;
+    border: 1px solid #2f3b57;
+    border-radius: 9px;
+    color: #8490a5;
+    font-size: 8.5pt;
+    font-weight: 700;
+    padding: 4px 9px;
+}
+
+QLabel#latencyBadge[latencyQuality="good"] {
+    background: #12332f;
+    border-color: #246a5d;
+    color: #6ee7b7;
+}
+
+QLabel#latencyBadge[latencyQuality="fair"] {
+    background: #352b15;
+    border-color: #6f5720;
+    color: #fcd34d;
+}
+
+QLabel#latencyBadge[latencyQuality="poor"] {
+    background: #3c1d28;
+    border-color: #7f3045;
+    color: #fda4af;
+}
+
 QLabel#caption, QLabel#settingsHint, QLabel#profileDetails {
     color: #98a2b3;
 }

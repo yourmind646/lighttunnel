@@ -7,6 +7,7 @@ Qt GUI
   ├─ VLESS parser and profile repository
   ├─ independent sing-box and Xray configuration builders
   ├─ verified GitHub Releases updater for the selected core
+  ├─ asynchronous, unprivileged endpoint latency monitor
   ├─ config validator (runs as the desktop user)
   └─ systemd core manager
        ├─ Polkit once → memory-only helper → systemd-run → one selected core
@@ -16,6 +17,10 @@ Qt GUI
 The GUI and core communicate only through a generated configuration and the systemd service
 state. A small privileged helper lives only as a child of the authenticated GUI and communicates
 over inherited stdin/stdout pipes; it creates no socket and exits on EOF or parent death.
+
+While connected, the GUI measures a TCP handshake to the selected VLESS endpoint every five
+seconds. The probe is asynchronous, has a three-second timeout, and never crosses the privilege
+boundary. It works when ICMP echo is blocked and does not send profile credentials.
 
 ## Privilege boundary
 

@@ -1,5 +1,6 @@
 #include "core/appsettings.h"
 #include "core/coreupdatemanager.h"
+#include "core/latencymonitor.h"
 #include "core/privilegedhelper.h"
 #include "core/singboxconfigbuilder.h"
 #include "core/systemdcommandbuilder.h"
@@ -10,6 +11,8 @@
 #include <QJsonObject>
 #include <QFile>
 #include <QProcess>
+#include <QSignalSpy>
+#include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -18,6 +21,7 @@
 using lighttunnel::AppSettings;
 using lighttunnel::CoreUpdateManager;
 using lighttunnel::CoreType;
+using lighttunnel::LatencyMonitor;
 using lighttunnel::PrivilegedHelper;
 using lighttunnel::SingBoxConfigBuilder;
 using lighttunnel::SystemdCommandBuilder;
@@ -43,9 +47,29 @@ private slots:
     void rejectsXrayWithoutNativeTunRoutingFix();
     void privilegedHelperBuildsOnlyConstrainedCommands();
     void privilegedHelperRejectsInsecureInput();
+    void measuresEndpointLatencyWithoutIcmp();
     void generatedConfigPassesSingBoxCheck();
     void generatedConfigPassesXrayCheck();
 };
+
+void CoreTests::measuresEndpointLatencyWithoutIcmp()
+{
+    QTcpServer server;
+    if (!server.listen(QHostAddress::LocalHost)) {
+        QSKIP("Loopback TCP sockets are unavailable in this build sandbox");
+    }
+
+    LatencyMonitor monitor;
+    QSignalSpy measurements(&monitor, &LatencyMonitor::latencyChanged);
+    monitor.start(QStringLiteral("127.0.0.1"), server.serverPort());
+
+    QTRY_VERIFY_WITH_TIMEOUT(
+        !measurements.isEmpty() && measurements.constLast().constFirst().toInt() >= 1,
+        1000);
+
+    monitor.stop();
+    QCOMPARE(measurements.constLast().constFirst().toInt(), -1);
+}
 
 void CoreTests::parsesRealityUri()
 {

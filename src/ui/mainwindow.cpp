@@ -72,6 +72,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(&m_coreManager, &SystemdCoreManager::errorOccurred, this, [this](const QString &message) {
         QMessageBox::critical(this, QStringLiteral("LightTunnel"), message);
     });
+    connect(&m_latencyMonitor, &LatencyMonitor::latencyChanged,
+            this, &MainWindow::updateLatency);
     connect(&m_coreUpdater, &CoreUpdateManager::statusChanged, this, [this](const QString &status) {
         m_coreUpdateValue->setText(status);
         m_coreUpdateValue->setToolTip(status);
@@ -253,12 +255,19 @@ void MainWindow::applyState(SystemdCoreManager::State state)
     m_profileCombo->setEnabled(!busy && state != SystemdCoreManager::State::Connected);
     m_connectButton->setEnabled(!busy && (!m_profiles.isEmpty() || state == SystemdCoreManager::State::Connected));
 
+    if (state != SystemdCoreManager::State::Connected) {
+        m_latencyMonitor.stop();
+    }
+
     if (state == SystemdCoreManager::State::Connected) {
         m_connectButton->setText(QStringLiteral("Отключиться"));
         m_connectButton->setProperty("connected", true);
         m_statusSubtitle->setText(QStringLiteral("Весь системный трафик проходит через защищённый TUN"));
         m_trayConnectAction->setText(QStringLiteral("Отключиться"));
         m_trayIcon->setToolTip(QStringLiteral("LightTunnel — подключено"));
+        if (const VlessProfile *profile = selectedProfile(); profile != nullptr) {
+            m_latencyMonitor.start(profile->server, profile->serverPort);
+        }
     } else if (busy) {
         m_connectButton->setText(state == SystemdCoreManager::State::Starting
                                      ? QStringLiteral("Подключение…")
@@ -279,6 +288,30 @@ void MainWindow::applyState(SystemdCoreManager::State state)
         m_forceQuit = true;
         qApp->quit();
     }
+}
+
+void MainWindow::updateLatency(int milliseconds)
+{
+    QString quality = QStringLiteral("unavailable");
+    QString text = QStringLiteral("PING —");
+    if (milliseconds >= 0) {
+        text = QStringLiteral("PING %1 ms").arg(milliseconds);
+        if (milliseconds <= 80) {
+            quality = QStringLiteral("good");
+        } else if (milliseconds <= 180) {
+            quality = QStringLiteral("fair");
+        } else {
+            quality = QStringLiteral("poor");
+        }
+        m_trayIcon->setToolTip(QStringLiteral("LightTunnel — подключено · %1 ms")
+                                   .arg(milliseconds));
+    } else if (m_coreManager.state() == SystemdCoreManager::State::Connected) {
+        m_trayIcon->setToolTip(QStringLiteral("LightTunnel — подключено · ping недоступен"));
+    }
+    m_latencyBadge->setText(text);
+    m_latencyBadge->setProperty("latencyQuality", quality);
+    m_latencyBadge->style()->unpolish(m_latencyBadge);
+    m_latencyBadge->style()->polish(m_latencyBadge);
 }
 
 void MainWindow::appendLog(const QString &line)
@@ -376,7 +409,17 @@ void MainWindow::buildUi()
     m_statusBadge = new QLabel(m_statusCard);
     m_statusBadge->setObjectName(QStringLiteral("statusBadge"));
     m_statusBadge->setAlignment(Qt::AlignCenter);
-    statusRow->addWidget(m_statusBadge, 0, Qt::AlignTop);
+    auto *statusBadges = new QVBoxLayout;
+    statusBadges->setSpacing(7);
+    statusBadges->addWidget(m_statusBadge, 0, Qt::AlignRight);
+    m_latencyBadge = new QLabel(QStringLiteral("PING —"), m_statusCard);
+    m_latencyBadge->setObjectName(QStringLiteral("latencyBadge"));
+    m_latencyBadge->setProperty("latencyQuality", QStringLiteral("unavailable"));
+    m_latencyBadge->setAlignment(Qt::AlignCenter);
+    m_latencyBadge->setToolTip(
+        QStringLiteral("Задержка TCP-подключения до выбранного VPN-сервера"));
+    statusBadges->addWidget(m_latencyBadge, 0, Qt::AlignRight);
+    statusRow->addLayout(statusBadges);
     statusLayout->addLayout(statusRow);
 
     auto *profileRow = new QHBoxLayout;

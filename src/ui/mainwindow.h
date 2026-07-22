@@ -2,6 +2,7 @@
 
 #include "core/appsettings.h"
 #include "core/coreupdatemanager.h"
+#include "core/latencymonitor.h"
 #include "core/profilerepository.h"
 #include "core/systemdcoremanager.h"
 
@@ -42,6 +43,7 @@ private slots:
     void requestQuit();
     void profileChanged(int index);
     void checkCoreUpdate();
+    void updateLatency(int milliseconds);
 
 private:
     void buildUi();
@@ -56,6 +58,7 @@ private:
     AppSettings m_settings;
     SystemdCoreManager m_coreManager;
     CoreUpdateManager m_coreUpdater;
+    LatencyMonitor m_latencyMonitor;
 
     QComboBox *m_profileCombo{};
     QFrame *m_statusCard{};
@@ -63,6 +66,7 @@ private:
     QLabel *m_statusTitle{};
     QLabel *m_statusSubtitle{};
     QLabel *m_statusBadge{};
+    QLabel *m_latencyBadge{};
     QLabel *m_endpointValue{};
     QLabel *m_interfaceValue{};
     QLabel *m_coreValue{};
