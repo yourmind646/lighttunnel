@@ -3,6 +3,7 @@
 #include "core/appsettings.h"
 #include "core/vlessprofile.h"
 
+#include <QJsonObject>
 #include <QObject>
 #include <QProcess>
 #include <QTimer>
@@ -43,7 +44,11 @@ private:
     void setState(State state);
     void beginJournalFollow();
     void stopJournalFollow();
-    void runPrivileged(const QStringList &arguments, State transitionalState);
+    void runPrivileged(QJsonObject request, State transitionalState);
+    void sendPendingRequest();
+    void consumeHelperOutput();
+    void finishPrivilegedRequest(bool ok, const QString &message);
+    void failPendingRequest(const QString &message);
     [[nodiscard]] bool validateConfig(const QString &corePath, CoreType type, QString *error);
     [[nodiscard]] bool unitIsActive() const;
 
@@ -52,9 +57,15 @@ private:
     QString m_configPath;
     QString m_corePath;
     CoreType m_runningCoreType{CoreType::SingBox};
-    QProcess m_controlProcess;
+    QProcess m_helperProcess;
     QProcess m_journalProcess;
     QTimer m_stateTimer;
+    QByteArray m_helperOutput;
+    QByteArray m_helperError;
+    QJsonObject m_pendingRequest;
+    qint64 m_nextRequestId{1};
+    qint64 m_pendingRequestId{};
+    bool m_pendingRequestSent{false};
     bool m_controlIsStart{false};
 };
 

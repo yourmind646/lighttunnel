@@ -2,11 +2,13 @@
 
 #include "core/coreupdatemanager.h"
 #include "core/singboxconfigbuilder.h"
-#include "core/systemdcommandbuilder.h"
 #include "core/xrayconfigbuilder.h"
 
 #include <QDir>
 #include <QFileInfo>
+#include <QCoreApplication>
+#include <QJsonDocument>
+#include <QJsonParseError>
 
 #include <unistd.h>
 
@@ -20,32 +22,36 @@ SystemdCoreManager::SystemdCoreManager(QObject *parent)
     m_stateTimer.setInterval(1500);
     connect(&m_stateTimer, &QTimer::timeout, this, &SystemdCoreManager::refreshState);
 
-    connect(&m_controlProcess, &QProcess::finished, this,
+    connect(&m_helperProcess, &QProcess::started, this, &SystemdCoreManager::sendPendingRequest);
+    connect(&m_helperProcess, &QProcess::readyReadStandardOutput,
+            this, &SystemdCoreManager::consumeHelperOutput);
+    connect(&m_helperProcess, &QProcess::readyReadStandardError, this, [this] {
+        m_helperError += m_helperProcess.readAllStandardError();
+        constexpr qsizetype maxErrorSize = 16 * 1024;
+        if (m_helperError.size() > maxErrorSize) {
+            m_helperError = m_helperError.right(maxErrorSize);
+        }
+    });
+    connect(&m_helperProcess, &QProcess::finished, this,
             [this](int exitCode, QProcess::ExitStatus exitStatus) {
-                const QString standardError = QString::fromUtf8(m_controlProcess.readAllStandardError()).trimmed();
-                if (exitStatus != QProcess::NormalExit || exitCode != 0) {
-                    setState(State::Error);
-                    const QString message = standardError.isEmpty()
-                        ? QStringLiteral("Привилегированная операция завершилась с кодом %1").arg(exitCode)
-                        : standardError;
-                    emit errorOccurred(message);
-                    emit logLine(QStringLiteral("Ошибка: %1").arg(message));
+                consumeHelperOutput();
+                if (m_pendingRequestId == 0) {
                     return;
                 }
-
-                if (m_controlIsStart) {
-                    if (unitIsActive()) {
-                        setState(State::Connected);
-                        beginJournalFollow();
-                    } else {
-                        setState(State::Error);
-                        emit errorOccurred(QStringLiteral("%1 завершился сразу после запуска. Проверьте журнал.")
-                                               .arg(coreDisplayName(m_runningCoreType)));
-                        beginJournalFollow();
-                    }
-                } else {
-                    stopJournalFollow();
-                    setState(State::Disconnected);
+                QString message = QString::fromUtf8(m_helperError).trimmed();
+                if (message.isEmpty()) {
+                    message = exitStatus == QProcess::NormalExit && exitCode == 126
+                        ? QStringLiteral("Авторизация Polkit отменена")
+                        : QStringLiteral("Привилегированный helper завершился с кодом %1")
+                              .arg(exitCode);
+                }
+                failPendingRequest(message);
+            });
+    connect(&m_helperProcess, &QProcess::errorOccurred, this,
+            [this](QProcess::ProcessError error) {
+                if (error == QProcess::FailedToStart && m_pendingRequestId != 0) {
+                    failPendingRequest(QStringLiteral("Не удалось запустить Polkit helper: %1")
+                                           .arg(m_helperProcess.errorString()));
                 }
             });
 
@@ -70,6 +76,10 @@ SystemdCoreManager::SystemdCoreManager(QObject *parent)
 SystemdCoreManager::~SystemdCoreManager()
 {
     stopJournalFollow();
+    if (m_helperProcess.state() != QProcess::NotRunning) {
+        m_helperProcess.closeWriteChannel();
+        m_helperProcess.waitForFinished(1500);
+    }
 }
 
 void SystemdCoreManager::connectTunnel(const VlessProfile &profile, const AppSettings &settings)
@@ -129,16 +139,16 @@ void SystemdCoreManager::connectTunnel(const VlessProfile &profile, const AppSet
         return;
     }
 
-    emit logLine(QStringLiteral("Конфигурация проверена. Запрашиваю права на создание TUN…"));
-    const QStringList arguments = SystemdCommandBuilder::startArguments(
-        m_unitName,
-        m_corePath,
-        m_configPath,
-        static_cast<quint32>(::getuid()),
-        static_cast<quint32>(::getgid()),
-        m_runningCoreType);
+    emit logLine(QStringLiteral("Конфигурация проверена. Запускаю защищённый TUN…"));
     m_controlIsStart = true;
-    runPrivileged(arguments, State::Starting);
+    runPrivileged(
+        QJsonObject{
+            {QStringLiteral("operation"), QStringLiteral("start")},
+            {QStringLiteral("corePath"), m_corePath},
+            {QStringLiteral("configPath"), m_configPath},
+            {QStringLiteral("coreType"), coreTypeKey(m_runningCoreType)},
+        },
+        State::Starting);
 }
 
 void SystemdCoreManager::disconnectTunnel()
@@ -150,12 +160,14 @@ void SystemdCoreManager::disconnectTunnel()
     }
     emit logLine(QStringLiteral("Останавливаю TUN…"));
     m_controlIsStart = false;
-    runPrivileged({QStringLiteral("systemctl"), QStringLiteral("stop"), m_unitName}, State::Stopping);
+    runPrivileged(
+        QJsonObject{{QStringLiteral("operation"), QStringLiteral("stop")}},
+        State::Stopping);
 }
 
 void SystemdCoreManager::refreshState()
 {
-    if (m_controlProcess.state() != QProcess::NotRunning) {
+    if (m_pendingRequestId != 0) {
         return;
     }
     const bool active = unitIsActive();
@@ -206,14 +218,122 @@ void SystemdCoreManager::stopJournalFollow()
     }
 }
 
-void SystemdCoreManager::runPrivileged(const QStringList &arguments, State transitionalState)
+void SystemdCoreManager::runPrivileged(QJsonObject request, State transitionalState)
 {
-    if (m_controlProcess.state() != QProcess::NotRunning) {
+    if (m_pendingRequestId != 0) {
         emit errorOccurred(QStringLiteral("Другая системная операция ещё выполняется"));
         return;
     }
+
+    if (m_nextRequestId <= 0) {
+        m_nextRequestId = 1;
+    }
+    m_pendingRequestId = m_nextRequestId++;
+    request.insert(QStringLiteral("id"), m_pendingRequestId);
+    m_pendingRequest = request;
+    m_pendingRequestSent = false;
+    m_helperError.clear();
     setState(transitionalState);
-    m_controlProcess.start(QStringLiteral("pkexec"), arguments);
+
+    if (m_helperProcess.state() == QProcess::Running) {
+        sendPendingRequest();
+        return;
+    }
+    if (m_helperProcess.state() == QProcess::NotRunning) {
+        m_helperOutput.clear();
+        m_helperProcess.start(
+            QStringLiteral("pkexec"),
+            {QCoreApplication::applicationFilePath(), QStringLiteral("--privileged-helper")});
+    }
+}
+
+void SystemdCoreManager::sendPendingRequest()
+{
+    if (m_pendingRequestId == 0 || m_pendingRequestSent
+        || m_helperProcess.state() != QProcess::Running) {
+        return;
+    }
+    QByteArray payload = QJsonDocument(m_pendingRequest).toJson(QJsonDocument::Compact);
+    payload.append('\n');
+    if (m_helperProcess.write(payload) != payload.size()) {
+        failPendingRequest(QStringLiteral("Не удалось передать команду привилегированному helper"));
+        return;
+    }
+    m_pendingRequestSent = true;
+}
+
+void SystemdCoreManager::consumeHelperOutput()
+{
+    m_helperOutput += m_helperProcess.readAllStandardOutput();
+    constexpr qsizetype maxOutputSize = 128 * 1024;
+    if (m_helperOutput.size() > maxOutputSize) {
+        m_helperOutput.clear();
+        failPendingRequest(QStringLiteral("Привилегированный helper вернул слишком большой ответ"));
+        return;
+    }
+
+    qsizetype newline = -1;
+    while ((newline = m_helperOutput.indexOf('\n')) >= 0) {
+        const QByteArray line = m_helperOutput.first(newline);
+        m_helperOutput.remove(0, newline + 1);
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            failPendingRequest(QStringLiteral("Привилегированный helper вернул некорректный ответ"));
+            return;
+        }
+        const QJsonObject object = document.object();
+        if (object.value(QStringLiteral("id")).toInteger() != m_pendingRequestId) {
+            failPendingRequest(QStringLiteral("Нарушена последовательность ответов helper"));
+            return;
+        }
+        finishPrivilegedRequest(
+            object.value(QStringLiteral("ok")).toBool(),
+            object.value(QStringLiteral("message")).toString());
+        return;
+    }
+}
+
+void SystemdCoreManager::finishPrivilegedRequest(bool ok, const QString &message)
+{
+    m_pendingRequestId = 0;
+    m_pendingRequest = {};
+    m_pendingRequestSent = false;
+    m_helperError.clear();
+
+    if (!ok) {
+        const QString details = message.isEmpty()
+            ? QStringLiteral("Привилегированная операция завершилась с ошибкой")
+            : message;
+        setState(State::Error);
+        emit errorOccurred(details);
+        emit logLine(QStringLiteral("Ошибка: %1").arg(details));
+        return;
+    }
+
+    if (m_controlIsStart) {
+        if (unitIsActive()) {
+            setState(State::Connected);
+            beginJournalFollow();
+        } else {
+            setState(State::Error);
+            emit errorOccurred(QStringLiteral("%1 завершился сразу после запуска. Проверьте журнал.")
+                                   .arg(coreDisplayName(m_runningCoreType)));
+            beginJournalFollow();
+        }
+    } else {
+        stopJournalFollow();
+        setState(State::Disconnected);
+    }
+}
+
+void SystemdCoreManager::failPendingRequest(const QString &message)
+{
+    if (m_pendingRequestId == 0) {
+        return;
+    }
+    finishPrivilegedRequest(false, message);
 }
 
 bool SystemdCoreManager::validateConfig(const QString &corePath, CoreType type, QString *error)

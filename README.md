@@ -18,10 +18,14 @@ independent and is not affiliated with either upstream project.
 - sing-box/Xray version display and verified automatic updates from official GitHub Releases.
 - Separate private managed directories for both cores; v2rayN is only a migration fallback.
 - Configuration validation by the selected core before requesting privileges.
+- One Polkit authorization per GUI session; an in-memory helper handles later connect/disconnect
+  operations and disappears when LightTunnel exits. The password is never stored or seen by the GUI.
 - Profile and runtime files are written with mode `0600`.
 
-LightTunnel deliberately does **not** run its GUI as root. It asks Polkit to create a hardened,
-transient systemd service for the selected core process. The service disappears after it stops.
+LightTunnel deliberately does **not** run its GUI as root. It asks Polkit once per application
+session to start a narrowly scoped in-memory helper, which creates or stops a hardened transient
+systemd service for the selected core. The helper accepts only validated LightTunnel operations
+and exits with the GUI; the core service disappears after it stops.
 
 ## 📦 Requirements
 

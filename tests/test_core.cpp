@@ -1,5 +1,6 @@
 #include "core/appsettings.h"
 #include "core/coreupdatemanager.h"
+#include "core/privilegedhelper.h"
 #include "core/singboxconfigbuilder.h"
 #include "core/systemdcommandbuilder.h"
 #include "core/vlessprofile.h"
@@ -7,13 +8,17 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QFile>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <unistd.h>
+
 using lighttunnel::AppSettings;
 using lighttunnel::CoreUpdateManager;
 using lighttunnel::CoreType;
+using lighttunnel::PrivilegedHelper;
 using lighttunnel::SingBoxConfigBuilder;
 using lighttunnel::SystemdCommandBuilder;
 using lighttunnel::VlessProfile;
@@ -36,6 +41,8 @@ private slots:
     void parsesVerifiedXrayRelease();
     void rejectsPrereleaseSingBoxRelease();
     void rejectsXrayWithoutNativeTunRoutingFix();
+    void privilegedHelperBuildsOnlyConstrainedCommands();
+    void privilegedHelperRejectsInsecureInput();
     void generatedConfigPassesSingBoxCheck();
     void generatedConfigPassesXrayCheck();
 };
@@ -268,6 +275,100 @@ void CoreTests::rejectsXrayWithoutNativeTunRoutingFix()
     QVERIFY(CoreUpdateManager::supportsNativeXrayRouting(QStringLiteral("26.5.9")));
     QVERIFY(CoreUpdateManager::supportsNativeXrayRouting(QStringLiteral("v26.7.11")));
     QVERIFY(!CoreUpdateManager::supportsNativeXrayRouting(QString()));
+}
+
+void CoreTests::privilegedHelperBuildsOnlyConstrainedCommands()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString corePath = directory.filePath(QStringLiteral("sing-box"));
+    const QString configPath = directory.filePath(QStringLiteral("config.json"));
+
+    QFile core(corePath);
+    QVERIFY(core.open(QIODevice::WriteOnly));
+    QVERIFY(core.write("test-core") > 0);
+    core.close();
+    QVERIFY(QFile::setPermissions(corePath, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                               | QFileDevice::ExeOwner));
+    QFile config(configPath);
+    QVERIFY(config.open(QIODevice::WriteOnly));
+    QVERIFY(config.write("{}") > 0);
+    config.close();
+    QVERIFY(QFile::setPermissions(configPath,
+                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+
+    const quint32 uid = static_cast<quint32>(::getuid());
+    const quint32 gid = static_cast<quint32>(::getgid());
+    QString error;
+    const auto start = PrivilegedHelper::commandForRequest(
+        QJsonObject{
+            {QStringLiteral("operation"), QStringLiteral("start")},
+            {QStringLiteral("corePath"), corePath},
+            {QStringLiteral("configPath"), configPath},
+            {QStringLiteral("coreType"), QStringLiteral("sing-box")},
+        },
+        uid,
+        gid,
+        &error);
+    QVERIFY2(start.has_value(), qPrintable(error));
+    QCOMPARE(start->program, QStringLiteral("/usr/bin/systemd-run"));
+    QVERIFY(start->arguments.contains(QStringLiteral("--unit=lighttunnel-core-%1.service").arg(uid)));
+    QVERIFY(start->arguments.contains(QStringLiteral("--property=User=%1").arg(uid)));
+    QVERIFY(start->arguments.contains(QFileInfo(corePath).canonicalFilePath()));
+
+    const auto stop = PrivilegedHelper::commandForRequest(
+        QJsonObject{{QStringLiteral("operation"), QStringLiteral("stop")}}, uid, gid, &error);
+    QVERIFY2(stop.has_value(), qPrintable(error));
+    QCOMPARE(stop->program, QStringLiteral("/usr/bin/systemctl"));
+    QCOMPARE(stop->arguments,
+             QStringList({QStringLiteral("stop"),
+                          QStringLiteral("lighttunnel-core-%1.service").arg(uid)}));
+}
+
+void CoreTests::privilegedHelperRejectsInsecureInput()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString corePath = directory.filePath(QStringLiteral("xray"));
+    const QString configPath = directory.filePath(QStringLiteral("config.json"));
+
+    QFile core(corePath);
+    QVERIFY(core.open(QIODevice::WriteOnly));
+    core.close();
+    QVERIFY(QFile::setPermissions(corePath, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                               | QFileDevice::ExeOwner));
+    QFile config(configPath);
+    QVERIFY(config.open(QIODevice::WriteOnly));
+    config.close();
+    QVERIFY(QFile::setPermissions(configPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                                   | QFileDevice::ReadGroup));
+
+    const QJsonObject request{
+        {QStringLiteral("operation"), QStringLiteral("start")},
+        {QStringLiteral("corePath"), corePath},
+        {QStringLiteral("configPath"), configPath},
+        {QStringLiteral("coreType"), QStringLiteral("xray")},
+        // These fields must never influence the derived privileged command.
+        {QStringLiteral("unit"), QStringLiteral("evil.service")},
+        {QStringLiteral("uid"), 0},
+    };
+    QString error;
+    QVERIFY(!PrivilegedHelper::commandForRequest(
+                 request,
+                 static_cast<quint32>(::getuid()),
+                 static_cast<quint32>(::getgid()),
+                 &error)
+                 .has_value());
+    QVERIFY(error.contains(QStringLiteral("0600")));
+
+    error.clear();
+    QVERIFY(!PrivilegedHelper::commandForRequest(
+                 QJsonObject{{QStringLiteral("operation"), QStringLiteral("shell")}},
+                 static_cast<quint32>(::getuid()),
+                 static_cast<quint32>(::getgid()),
+                 &error)
+                 .has_value());
+    QVERIFY(error.contains(QStringLiteral("Неизвестная")));
 }
 
 void CoreTests::generatedConfigPassesSingBoxCheck()

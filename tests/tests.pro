@@ -10,6 +10,7 @@ SOURCES += \
     test_core.cpp \
     ../src/core/appsettings.cpp \
     ../src/core/coreupdatemanager.cpp \
+    ../src/core/privilegedhelper.cpp \
     ../src/core/singboxconfigbuilder.cpp \
     ../src/core/xrayconfigbuilder.cpp \
     ../src/core/systemdcommandbuilder.cpp \
@@ -18,6 +19,7 @@ SOURCES += \
 HEADERS += \
     ../src/core/appsettings.h \
     ../src/core/coreupdatemanager.h \
+    ../src/core/privilegedhelper.h \
     ../src/core/singboxconfigbuilder.h \
     ../src/core/xrayconfigbuilder.h \
     ../src/core/systemdcommandbuilder.h \

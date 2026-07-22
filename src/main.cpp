@@ -1,12 +1,17 @@
 #include "ui/mainwindow.h"
 
+#include "core/privilegedhelper.h"
+
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QLockFile>
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QStyleFactory>
+
+#include <unistd.h>
 
 namespace {
 
@@ -22,6 +27,21 @@ QString loadStyleSheet()
 
 int main(int argc, char *argv[])
 {
+    const bool helperRequested = argc >= 2
+        && QByteArray(argv[1]) == QByteArrayLiteral("--privileged-helper");
+    if (helperRequested) {
+        if (argc != 2) {
+            return 64;
+        }
+        QCoreApplication helperApplication(argc, argv);
+        return lighttunnel::PrivilegedHelper::run();
+    }
+    // The graphical application must never run as root, including through a
+    // manually constructed pkexec invocation.
+    if (::geteuid() == 0) {
+        return 77;
+    }
+
     QApplication application(argc, argv);
     application.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
     QApplication::setOrganizationName(QStringLiteral("LightTunnel"));

@@ -14,6 +14,7 @@ SOURCES += \
     src/core/appsettings.cpp \
     src/core/autostartmanager.cpp \
     src/core/coreupdatemanager.cpp \
+    src/core/privilegedhelper.cpp \
     src/core/profilerepository.cpp \
     src/core/singboxconfigbuilder.cpp \
     src/core/xrayconfigbuilder.cpp \
@@ -30,6 +31,7 @@ HEADERS += \
     src/core/appsettings.h \
     src/core/autostartmanager.h \
     src/core/coreupdatemanager.h \
+    src/core/privilegedhelper.h \
     src/core/profilerepository.h \
     src/core/singboxconfigbuilder.h \
     src/core/xrayconfigbuilder.h \
@@ -53,5 +55,7 @@ unix:!macx {
     desktop.files = packaging/io.github.lighttunnel.LightTunnel.desktop
     icons.path = /usr/share/icons/hicolor/scalable/apps
     icons.files = resources/icons/lighttunnel.svg
-    INSTALLS += target desktop icons
+    policy.path = /usr/share/polkit-1/actions
+    policy.files = packaging/io.github.lighttunnel.policy
+    INSTALLS += target desktop icons policy
 }

@@ -9,18 +9,22 @@ Qt GUI
   ├─ verified GitHub Releases updater for the selected core
   ├─ config validator (runs as the desktop user)
   └─ systemd core manager
-       ├─ Polkit → systemd-run → exactly one selected core (transient)
+       ├─ Polkit once → memory-only helper → systemd-run → one selected core
        └─ journalctl follower (desktop user)
 ```
 
 The GUI and core communicate only through a generated configuration and the systemd service
-state. There is no long-running custom privileged helper and no writable root-owned socket.
+state. A small privileged helper lives only as a child of the authenticated GUI and communicates
+over inherited stdin/stdout pipes; it creates no socket and exits on EOF or parent death.
 
 ## Privilege boundary
 
-TUN creation and route/nftables changes require `CAP_NET_ADMIN`. LightTunnel launches a transient
-system unit through `pkexec systemd-run`. The selected core runs as the calling desktop UID, while systemd
-grants only the network capabilities needed for TUN operation. The unit is constrained with:
+TUN creation and route/nftables changes require `CAP_NET_ADMIN`. LightTunnel launches its fixed
+helper through a dedicated Polkit action. The helper derives the caller UID from `PKEXEC_UID`,
+rejects caller-supplied unit names and UIDs, verifies ownership and permissions of the core and
+`0600` configuration, and constructs the `systemd-run` invocation itself. The selected core runs
+as the calling desktop UID, while systemd grants only the network capabilities needed for TUN
+operation. The unit is constrained with:
 
 - `NoNewPrivileges=true`
 - a small capability bounding set
@@ -30,8 +34,9 @@ grants only the network capabilities needed for TUN operation. The unit is const
 - `PrivateTmp=true`
 - `KillMode=mixed`
 
-Stopping the tunnel also goes through Polkit. The generated configuration is validated before this
-boundary is crossed.
+The first start or stop in each GUI session triggers the standard Polkit dialog. Later operations
+reuse the already-authorized helper in RAM; neither the password nor an authorization token is
+stored by LightTunnel. The generated configuration is validated before this boundary is crossed.
 
 ## Routing defaults
 

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+<policyconfig>
+  <vendor>LightTunnel</vendor>
+  <vendor_url>https://github.com/yourmind646/lighttunnel</vendor_url>
+  <icon_name>lighttunnel</icon_name>
+
+  <action id="io.github.lighttunnel.manage-tunnel">
+    <description>Manage the LightTunnel network tunnel</description>
+    <description xml:lang="ru">Управление сетевым туннелем LightTunnel</description>
+    <message>Authentication is required to create or stop the LightTunnel TUN interface</message>
+    <message xml:lang="ru">Для создания или остановки TUN-интерфейса LightTunnel требуется авторизация</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/lighttunnel</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">--privileged-helper</annotate>
+  </action>
+</policyconfig>
