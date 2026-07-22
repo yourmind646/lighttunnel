@@ -42,6 +42,37 @@ cd ~/Desktop/MyProjects/LightTunnel
 ./build/lighttunnel
 ```
 
+### Debian and Ubuntu
+
+On a current Debian- or Ubuntu-based distribution with systemd, install the build and runtime
+dependencies, then install LightTunnel for the current user:
+
+```bash
+sudo apt update
+sudo apt install build-essential git libarchive-tools libgl1-mesa-dev \
+    policykit-1 qt6-base-dev qt6-base-dev-tools
+
+git clone https://github.com/yourmind646/lighttunnel.git
+cd lighttunnel
+./scripts/build.sh
+./scripts/install-user.sh
+```
+
+Start **LightTunnel** from the application menu or run `~/.local/bin/lighttunnel`. The GUI never
+runs as root; Polkit asks for permission only when the protected TUN service is started. sing-box
+does not need to be installed separately because LightTunnel downloads and verifies it on first
+launch.
+
+To remove the per-user installation while keeping profiles and settings:
+
+```bash
+cd lighttunnel
+./scripts/uninstall.sh
+```
+
+On GNOME, install or enable an AppIndicator/KStatusNotifier extension if the tray icon is not
+shown. The main window and VPN connection work without that extension.
+
 ### Arch Linux and Manjaro package
 
 Build and install a pacman-managed package:
