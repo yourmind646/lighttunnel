@@ -24,6 +24,7 @@ private slots:
     void parsesWebSocketUri();
     void rejectsUnsupportedTransport();
     void bindsEveryNetworkOutbound();
+    void ipv4TunUsesIpv4Dns();
     void quicPolicyIsExplicit();
     void systemdServiceUsesCallingUserWithNetworkCapabilities();
     void parsesVerifiedCoreRelease();
@@ -83,6 +84,20 @@ void CoreTests::bindsEveryNetworkOutbound()
              QStringLiteral("wlan0"));
     QCOMPARE(outbounds.at(1).toObject().value(QStringLiteral("bind_interface")).toString(),
              QStringLiteral("wlan0"));
+}
+
+void CoreTests::ipv4TunUsesIpv4Dns()
+{
+    VlessProfile profile;
+    profile.uuid = QStringLiteral("11111111-2222-3333-4444-555555555555");
+    profile.server = QStringLiteral("example.com");
+    const QJsonObject dns = SingBoxConfigBuilder::build(
+                                profile, AppSettings{}, QStringLiteral("wlan0"))
+                                .value(QStringLiteral("dns"))
+                                .toObject();
+
+    QCOMPARE(dns.value(QStringLiteral("strategy")).toString(), QStringLiteral("ipv4_only"));
+    QVERIFY(!dns.contains(QStringLiteral("independent_cache")));
 }
 
 void CoreTests::quicPolicyIsExplicit()

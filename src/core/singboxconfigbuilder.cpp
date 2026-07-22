@@ -50,7 +50,7 @@ QJsonObject SingBoxConfigBuilder::build(const VlessProfile &profile,
     const QJsonObject dns{
         {QStringLiteral("servers"), QJsonArray{remoteDns, localDns}},
         {QStringLiteral("final"), QStringLiteral("remote_dns")},
-        {QStringLiteral("independent_cache"), true},
+        {QStringLiteral("strategy"), QStringLiteral("ipv4_only")},
     };
 
     const QJsonObject mixedInbound{

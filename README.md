@@ -160,6 +160,8 @@ For a threat model and design details, see [docs/ARCHITECTURE.md](docs/ARCHITECT
 
 - VLESS XHTTP is specific to Xray-core and is not implemented by the sing-box backend. Supporting
   it requires a separate Xray-based transport backend rather than translating it to plain HTTP.
+- The TUN currently operates in IPv4-only mode; DNS responses are restricted to IPv4 to avoid
+  connection fallback delays on networks without routed IPv6.
 - Subscription import is currently one-shot; periodic background refresh and QR scanning are planned.
 - GNOME may require an AppIndicator/status notifier shell extension for full tray interaction.
 - Profiles are protected by filesystem permissions, not by KWallet/Secret Service encryption yet.
