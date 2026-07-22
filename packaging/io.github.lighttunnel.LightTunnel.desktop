@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LightTunnel
+GenericName=VPN Client
+Comment=Lightweight VLESS VPN client powered by sing-box
+Exec=lighttunnel
+Icon=lighttunnel
+Terminal=false
+Categories=Network;Security;
+Keywords=VPN;VLESS;TUN;Proxy;
+StartupNotify=true

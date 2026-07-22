@@ -1,0 +1,47 @@
+# Maintainer: LightTunnel contributors
+
+pkgname=lighttunnel
+pkgver=0.1.0
+pkgrel=3
+pkgdesc='Lightweight native VLESS VPN client powered by sing-box'
+arch=('x86_64')
+license=('MIT')
+depends=('qt6-base' 'systemd' 'polkit' 'libarchive')
+checkdepends=('desktop-file-utils')
+
+# This PKGBUILD is intentionally located below packaging/arch. makepkg owns its
+# local src/ and pkg/ directories, so it never collides with the project's src/.
+
+build() {
+    local project_root="${startdir}/../.."
+
+    mkdir -p "${srcdir}/build"
+    cd "${srcdir}/build"
+    qmake6 "${project_root}/LightTunnel.pro" CONFIG+=release
+    make
+}
+
+check() {
+    local project_root="${startdir}/../.."
+
+    mkdir -p "${srcdir}/tests-build"
+    cd "${srcdir}/tests-build"
+    qmake6 "${project_root}/tests/tests.pro" CONFIG+=release
+    make
+    QT_QPA_PLATFORM=offscreen ./lighttunnel_tests
+
+    desktop-file-validate \
+        "${project_root}/packaging/io.github.lighttunnel.LightTunnel.desktop"
+}
+
+package() {
+    local project_root="${startdir}/../.."
+
+    make -C "${srcdir}/build" INSTALL_ROOT="${pkgdir}" install
+    install -Dm644 "${project_root}/LICENSE" \
+        "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    install -Dm644 "${project_root}/README.md" \
+        "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+    install -Dm644 "${project_root}/docs/ARCHITECTURE.md" \
+        "${pkgdir}/usr/share/doc/${pkgname}/ARCHITECTURE.md"
+}

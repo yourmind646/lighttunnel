@@ -1,0 +1,25 @@
+#pragma once
+
+#include "core/appsettings.h"
+#include "core/vlessprofile.h"
+
+#include <QJsonObject>
+#include <QString>
+
+namespace lighttunnel {
+
+class SingBoxConfigBuilder final {
+public:
+    [[nodiscard]] static QJsonObject build(const VlessProfile &profile,
+                                            const AppSettings &settings,
+                                            const QString &networkInterface);
+    [[nodiscard]] static bool writeSecurely(const QJsonObject &config,
+                                             const QString &path,
+                                             QString *error = nullptr);
+
+private:
+    [[nodiscard]] static QJsonObject buildProxyOutbound(const VlessProfile &profile,
+                                                         const QString &networkInterface);
+};
+
+} // namespace lighttunnel
