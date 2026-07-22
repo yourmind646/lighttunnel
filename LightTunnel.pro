@@ -16,6 +16,7 @@ SOURCES += \
     src/core/coreupdatemanager.cpp \
     src/core/profilerepository.cpp \
     src/core/singboxconfigbuilder.cpp \
+    src/core/xrayconfigbuilder.cpp \
     src/core/systemdcommandbuilder.cpp \
     src/core/systemdcoremanager.cpp \
     src/core/vlessprofile.cpp \
@@ -30,6 +31,7 @@ HEADERS += \
     src/core/coreupdatemanager.h \
     src/core/profilerepository.h \
     src/core/singboxconfigbuilder.h \
+    src/core/xrayconfigbuilder.h \
     src/core/systemdcommandbuilder.h \
     src/core/systemdcoremanager.h \
     src/core/vlessprofile.h \

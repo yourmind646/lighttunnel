@@ -57,7 +57,7 @@ MainWindow::MainWindow(QWidget *parent)
     buildUi();
     buildTray();
     reloadProfiles(m_settings.lastProfileId);
-    m_coreUpdater.setCurrentCore(m_settings.corePath);
+    m_coreUpdater.setCore(m_settings.coreType, m_settings.corePath());
 
     if (m_settings.autostart) {
         QString autostartError;
@@ -76,21 +76,29 @@ MainWindow::MainWindow(QWidget *parent)
         m_coreUpdateValue->setToolTip(status);
     });
     connect(&m_coreUpdater, &CoreUpdateManager::progressChanged, this, [this](int percent) {
-        m_coreUpdateValue->setText(QStringLiteral("Скачивание sing-box · %1%").arg(percent));
+        m_coreUpdateValue->setText(QStringLiteral("Скачивание %1 · %2%")
+                                       .arg(coreDisplayName(m_coreUpdater.coreType()))
+                                       .arg(percent));
     });
     connect(&m_coreUpdater, &CoreUpdateManager::currentVersionChanged, this, [this](const QString &) {
         updateProfileDetails();
     });
     connect(&m_coreUpdater, &CoreUpdateManager::coreInstalled, this,
             [this](const QString &path, const QString &version) {
-                m_settings.corePath = path;
+                const CoreType installedType = m_coreUpdater.coreType();
+                if (installedType == CoreType::Xray) {
+                    m_settings.xrayPath = path;
+                } else {
+                    m_settings.singBoxPath = path;
+                }
                 m_settings.save();
                 updateProfileDetails();
                 const bool connected = m_coreManager.state() == SystemdCoreManager::State::Connected;
                 appendLog(connected
-                              ? QStringLiteral("sing-box %1 установлен и будет использован после переподключения")
-                                    .arg(version)
-                              : QStringLiteral("sing-box %1 установлен и готов к работе").arg(version));
+                              ? QStringLiteral("%1 %2 установлен и будет использован после переподключения")
+                                    .arg(coreDisplayName(installedType), version)
+                              : QStringLiteral("%1 %2 установлен и готов к работе")
+                                    .arg(coreDisplayName(installedType), version));
             });
     connect(&m_coreUpdater, &CoreUpdateManager::errorOccurred, this, [this](const QString &message) {
         m_coreUpdateValue->setText(QStringLiteral("Не удалось проверить обновление"));
@@ -100,7 +108,7 @@ MainWindow::MainWindow(QWidget *parent)
     applyState(m_coreManager.state());
 
     QTimer::singleShot(1600, this, [this] {
-        if (m_settings.autoUpdateCore || m_settings.corePath.isEmpty()) {
+        if (m_settings.autoUpdateCore || m_settings.corePath().isEmpty()) {
             m_coreUpdater.checkForUpdates(false);
         }
     });
@@ -180,17 +188,28 @@ void MainWindow::openSettings()
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
-    const AppSettings newSettings = dialog.settings();
+    AppSettings newSettings = dialog.settings();
+    if (m_coreUpdater.isBusy()
+        && (newSettings.coreType != m_settings.coreType
+            || newSettings.corePath() != m_settings.corePath())) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("Обновление ядра"),
+            QStringLiteral("Дождитесь завершения текущего обновления перед сменой ядра или его пути."));
+        newSettings.coreType = m_settings.coreType;
+        newSettings.singBoxPath = m_settings.singBoxPath;
+        newSettings.xrayPath = m_settings.xrayPath;
+    }
     QString error;
     if (!AutostartManager::setEnabled(newSettings.autostart, &error)) {
         QMessageBox::warning(this, QStringLiteral("Автозапуск"), error);
     }
     m_settings = newSettings;
     m_settings.save();
-    m_coreUpdater.setCurrentCore(m_settings.corePath);
+    m_coreUpdater.setCore(m_settings.coreType, m_settings.corePath());
     updateProfileDetails();
     appendLog(QStringLiteral("Настройки сохранены"));
-    if (m_settings.autoUpdateCore || m_settings.corePath.isEmpty()) {
+    if (m_settings.autoUpdateCore || m_settings.corePath().isEmpty()) {
         m_coreUpdater.checkForUpdates(false);
     }
 }
@@ -305,7 +324,7 @@ void MainWindow::profileChanged(int index)
 
 void MainWindow::checkCoreUpdate()
 {
-    m_coreUpdater.setCurrentCore(m_settings.corePath);
+    m_coreUpdater.setCore(m_settings.coreType, m_settings.corePath());
     m_coreUpdater.checkForUpdates(true);
 }
 
@@ -418,7 +437,7 @@ void MainWindow::buildUi()
     m_logView = new QTextEdit(logs);
     m_logView->setReadOnly(true);
     m_logView->setObjectName(QStringLiteral("logView"));
-    m_logView->setPlaceholderText(QStringLiteral("Здесь появятся сообщения sing-box…"));
+    m_logView->setPlaceholderText(QStringLiteral("Здесь появятся сообщения VPN-ядра…"));
     logsLayout->addWidget(m_logView);
 
     tabs->addTab(overview, QStringLiteral("Обзор"));
@@ -488,22 +507,25 @@ void MainWindow::updateProfileDetails()
     const QString interfaceName = m_settings.effectiveInterface();
     m_interfaceValue->setText(interfaceName.isEmpty() ? QStringLiteral("Не определён") : interfaceName);
     QString version;
-    if (m_coreUpdater.currentPath() == m_settings.corePath) {
+    if (m_coreUpdater.coreType() == m_settings.coreType
+        && m_coreUpdater.currentPath() == m_settings.corePath()) {
         version = m_coreUpdater.currentVersion();
     } else {
-        version = CoreUpdateManager::detectVersion(m_settings.corePath);
+        version = CoreUpdateManager::detectVersion(m_settings.corePath(), m_settings.coreType);
     }
-    if (m_settings.corePath.isEmpty()) {
+    if (m_settings.corePath().isEmpty()) {
         m_coreValue->setText(QStringLiteral("Не установлен"));
         if (!m_coreUpdater.isBusy()) {
             m_coreUpdateValue->setText(QStringLiteral("Будет загружен с GitHub Releases"));
         }
     } else if (!version.isEmpty()) {
-        m_coreValue->setText(QStringLiteral("sing-box %1").arg(version));
+        m_coreValue->setText(QStringLiteral("%1 %2")
+                                 .arg(coreDisplayName(m_settings.coreType), version));
     } else {
-        m_coreValue->setText(QStringLiteral("sing-box · версия неизвестна"));
+        m_coreValue->setText(QStringLiteral("%1 · версия неизвестна")
+                                 .arg(coreDisplayName(m_settings.coreType)));
     }
-    m_coreValue->setToolTip(m_settings.corePath);
+    m_coreValue->setToolTip(m_settings.corePath());
 }
 
 const VlessProfile *MainWindow::selectedProfile() const

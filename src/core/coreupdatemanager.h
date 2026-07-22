@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/appsettings.h"
+
 #include <QByteArray>
 #include <QObject>
 #include <QString>
@@ -29,17 +31,19 @@ public:
     explicit CoreUpdateManager(QObject *parent = nullptr);
     ~CoreUpdateManager() override;
 
-    void setCurrentCore(const QString &path);
+    void setCore(CoreType type, const QString &path);
     void checkForUpdates(bool force = false);
 
     [[nodiscard]] QString currentPath() const { return m_currentPath; }
     [[nodiscard]] QString currentVersion() const { return m_currentVersion; }
+    [[nodiscard]] CoreType coreType() const noexcept { return m_coreType; }
     [[nodiscard]] bool isBusy() const noexcept { return m_reply != nullptr; }
 
-    [[nodiscard]] static QString detectVersion(const QString &corePath);
+    [[nodiscard]] static QString detectVersion(const QString &corePath, CoreType type);
     [[nodiscard]] static std::optional<CoreRelease> parseRelease(const QByteArray &json,
+                                                                CoreType type,
                                                                 QString *error = nullptr);
-    [[nodiscard]] static QString managedCoreDirectory();
+    [[nodiscard]] static QString managedCoreDirectory(CoreType type);
 
 signals:
     void statusChanged(const QString &status);
@@ -74,6 +78,7 @@ private:
     CoreRelease m_release;
     std::unique_ptr<QTemporaryFile> m_archive;
     qint64 m_downloadedBytes{};
+    CoreType m_coreType{CoreType::SingBox};
 };
 
 } // namespace lighttunnel

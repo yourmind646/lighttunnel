@@ -25,6 +25,7 @@ struct VlessProfile final {
     QString path;
     QString host;
     QString serviceName;
+    QString xhttpMode;
     int maxEarlyData{0};
     QString earlyDataHeader;
     bool allowInsecure{false};

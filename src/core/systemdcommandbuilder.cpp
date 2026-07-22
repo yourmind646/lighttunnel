@@ -8,13 +8,14 @@ QStringList SystemdCommandBuilder::startArguments(const QString &unitName,
                                                   const QString &corePath,
                                                   const QString &configPath,
                                                   quint32 userId,
-                                                  quint32 groupId)
+                                                  quint32 groupId,
+                                                  CoreType coreType)
 {
     const QString capabilities =
         QStringLiteral("CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE");
     const QString workingDirectory = QFileInfo(configPath).absolutePath();
 
-    return {
+    QStringList arguments{
         QStringLiteral("systemd-run"),
         QStringLiteral("--unit=%1").arg(unitName),
         QStringLiteral("--collect"),
@@ -36,8 +37,11 @@ QStringList SystemdCommandBuilder::startArguments(const QString &unitName,
         QStringLiteral("run"),
         QStringLiteral("-c"),
         configPath,
-        QStringLiteral("--disable-color"),
     };
+    if (coreType == CoreType::SingBox) {
+        arguments.append(QStringLiteral("--disable-color"));
+    }
+    return arguments;
 }
 
 } // namespace lighttunnel

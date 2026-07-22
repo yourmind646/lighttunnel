@@ -2,6 +2,7 @@
 
 #include "core/singboxconfigbuilder.h"
 #include "core/systemdcommandbuilder.h"
+#include "core/xrayconfigbuilder.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -37,7 +38,8 @@ SystemdCoreManager::SystemdCoreManager(QObject *parent)
                         beginJournalFollow();
                     } else {
                         setState(State::Error);
-                        emit errorOccurred(QStringLiteral("sing-box завершился сразу после запуска. Проверьте журнал."));
+                        emit errorOccurred(QStringLiteral("%1 завершился сразу после запуска. Проверьте журнал.")
+                                               .arg(coreDisplayName(m_runningCoreType)));
                         beginJournalFollow();
                     }
                 } else {
@@ -77,10 +79,12 @@ void SystemdCoreManager::connectTunnel(const VlessProfile &profile, const AppSet
         return;
     }
 
-    m_corePath = settings.corePath.trimmed();
+    m_runningCoreType = settings.coreType;
+    m_corePath = settings.corePath().trimmed();
     const QFileInfo coreInfo(m_corePath);
     if (!coreInfo.isFile() || !coreInfo.isExecutable()) {
-        emit errorOccurred(QStringLiteral("Не найден исполняемый sing-box. Укажите путь в настройках."));
+        emit errorOccurred(QStringLiteral("Не найден исполняемый %1. Укажите путь в настройках.")
+                               .arg(coreDisplayName(m_runningCoreType)));
         setState(State::Error);
         return;
     }
@@ -93,13 +97,20 @@ void SystemdCoreManager::connectTunnel(const VlessProfile &profile, const AppSet
     }
 
     QString error;
-    const QJsonObject config = SingBoxConfigBuilder::build(profile, settings, networkInterface);
+    if (m_runningCoreType == CoreType::SingBox && profile.transport == QStringLiteral("xhttp")) {
+        emit errorOccurred(QStringLiteral("Профиль использует XHTTP. Выберите ядро Xray в настройках."));
+        setState(State::Error);
+        return;
+    }
+    const QJsonObject config = m_runningCoreType == CoreType::Xray
+        ? XrayConfigBuilder::build(profile, settings, networkInterface)
+        : SingBoxConfigBuilder::build(profile, settings, networkInterface);
     if (!SingBoxConfigBuilder::writeSecurely(config, m_configPath, &error)) {
         emit errorOccurred(error);
         setState(State::Error);
         return;
     }
-    if (!validateConfig(m_corePath, &error)) {
+    if (!validateConfig(m_corePath, m_runningCoreType, &error)) {
         emit errorOccurred(error);
         emit logLine(error);
         setState(State::Error);
@@ -112,7 +123,8 @@ void SystemdCoreManager::connectTunnel(const VlessProfile &profile, const AppSet
         m_corePath,
         m_configPath,
         static_cast<quint32>(::getuid()),
-        static_cast<quint32>(::getgid()));
+        static_cast<quint32>(::getgid()),
+        m_runningCoreType);
     m_controlIsStart = true;
     runPrivileged(arguments, State::Starting);
 }
@@ -141,7 +153,7 @@ void SystemdCoreManager::refreshState()
     } else if (!active && m_state == State::Connected) {
         stopJournalFollow();
         setState(State::Disconnected);
-        emit logLine(QStringLiteral("sing-box остановлен"));
+        emit logLine(QStringLiteral("%1 остановлен").arg(coreDisplayName(m_runningCoreType)));
     } else if (!active && m_state == State::Error) {
         setState(State::Disconnected);
     }
@@ -192,20 +204,26 @@ void SystemdCoreManager::runPrivileged(const QStringList &arguments, State trans
     m_controlProcess.start(QStringLiteral("pkexec"), arguments);
 }
 
-bool SystemdCoreManager::validateConfig(const QString &corePath, QString *error)
+bool SystemdCoreManager::validateConfig(const QString &corePath, CoreType type, QString *error)
 {
     QProcess check;
-    check.start(corePath, {QStringLiteral("check"), QStringLiteral("-c"), m_configPath});
+    const QStringList arguments = type == CoreType::Xray
+        ? QStringList{QStringLiteral("run"), QStringLiteral("-test"), QStringLiteral("-dump"),
+                      QStringLiteral("-c"), m_configPath}
+        : QStringList{QStringLiteral("check"), QStringLiteral("-c"), m_configPath};
+    check.start(corePath, arguments);
     if (!check.waitForStarted(2000)) {
         if (error != nullptr) {
-            *error = QStringLiteral("Не удалось запустить проверку sing-box: %1").arg(check.errorString());
+            *error = QStringLiteral("Не удалось запустить проверку %1: %2")
+                         .arg(coreDisplayName(type), check.errorString());
         }
         return false;
     }
     if (!check.waitForFinished(10000)) {
         check.kill();
         if (error != nullptr) {
-            *error = QStringLiteral("Проверка конфигурации sing-box превысила 10 секунд");
+            *error = QStringLiteral("Проверка конфигурации %1 превысила 10 секунд")
+                         .arg(coreDisplayName(type));
         }
         return false;
     }
@@ -215,7 +233,8 @@ bool SystemdCoreManager::validateConfig(const QString &corePath, QString *error)
             details = QString::fromUtf8(check.readAllStandardOutput()).trimmed();
         }
         if (error != nullptr) {
-            *error = QStringLiteral("sing-box отклонил конфигурацию:\n%1").arg(details);
+            *error = QStringLiteral("%1 отклонил конфигурацию:\n%2")
+                         .arg(coreDisplayName(type), details);
         }
         return false;
     }

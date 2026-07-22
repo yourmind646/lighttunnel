@@ -44,13 +44,14 @@ private:
     void beginJournalFollow();
     void stopJournalFollow();
     void runPrivileged(const QStringList &arguments, State transitionalState);
-    [[nodiscard]] bool validateConfig(const QString &corePath, QString *error);
+    [[nodiscard]] bool validateConfig(const QString &corePath, CoreType type, QString *error);
     [[nodiscard]] bool unitIsActive() const;
 
     State m_state{State::Disconnected};
     QString m_unitName;
     QString m_configPath;
     QString m_corePath;
+    CoreType m_runningCoreType{CoreType::SingBox};
     QProcess m_controlProcess;
     QProcess m_journalProcess;
     QTimer m_stateTimer;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/appsettings.h"
+
 #include <QString>
 #include <QStringList>
 
@@ -11,7 +13,8 @@ public:
                                                     const QString &corePath,
                                                     const QString &configPath,
                                                     quint32 userId,
-                                                    quint32 groupId);
+                                                    quint32 groupId,
+                                                    CoreType coreType = CoreType::SingBox);
 };
 
 } // namespace lighttunnel

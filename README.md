@@ -1,25 +1,27 @@
 # 🛡️ LightTunnel
 
 LightTunnel is a small native VLESS VPN client for Linux. The interface is written in modern
-C++20 and Qt 6; the network engine is the official `sing-box` executable installed on the
-system. The project is independent and is not affiliated with the sing-box maintainers.
+C++20 and Qt 6. You can select either official `sing-box` or official `Xray-core` as the network
+engine. Only the selected core runs; LightTunnel never chains the two backends. The project is
+independent and is not affiliated with either upstream project.
 
 ## ✨ Current feature set
 
 - Import one or several `vless://` links, including plain or Base64 subscription URLs.
-- VLESS over TCP, WebSocket, gRPC and HTTPUpgrade.
+- VLESS over TCP, WebSocket, gRPC and HTTPUpgrade with both cores; XHTTP with Xray.
 - TLS and REALITY, including uTLS fingerprint, Vision flow and XUDP.
 - System-wide TUN with automatic routing and DNS interception.
 - Safe explicit binding of both proxy and direct connections to the physical interface.
 - KDE/GNOME tray, connect/disconnect actions and start minimized.
 - Freedesktop autostart.
 - Live `journalctl` logs inside the application.
-- sing-box version display and verified automatic updates from official GitHub Releases.
-- Configuration validation via `sing-box check` before requesting privileges.
+- sing-box/Xray version display and verified automatic updates from official GitHub Releases.
+- Separate private managed directories for both cores; v2rayN is only a migration fallback.
+- Configuration validation by the selected core before requesting privileges.
 - Profile and runtime files are written with mode `0600`.
 
 LightTunnel deliberately does **not** run its GUI as root. It asks Polkit to create a hardened,
-transient systemd service for the sing-box process. The service disappears after it stops.
+transient systemd service for the selected core process. The service disappears after it stops.
 
 ## 📦 Requirements
 
@@ -27,12 +29,13 @@ transient systemd service for the sing-box process. The service disappears after
 - Qt 6 (`Core`, `Gui`, `Widgets`, `Network`, and `Test` for tests)
 - qmake 6
 - GCC or Clang with C++20 support
-- `libarchive`/`bsdtar` for installing sing-box updates
+- `libarchive`/`bsdtar` for installing core updates
 
-An existing sing-box installation is optional. LightTunnel can use `/usr/bin/sing-box`, a core
-shipped with v2rayN, or a manually selected executable. On a clean system it downloads the latest
-stable official sing-box release on first launch, verifies the SHA-256 published by GitHub, checks
-the reported version, and stores the executable in the private application data directory.
+An existing core installation is optional. On a clean system LightTunnel downloads the latest
+stable release of the selected core, verifies the SHA-256 published by GitHub, checks the reported
+version, and stores it below its own private application data directory. System executables and
+old v2rayN cores can be detected for migration, but an automatic update moves normal operation to
+LightTunnel's own managed copy.
 
 ## 🛠️ Build and run
 
@@ -59,9 +62,8 @@ cd lighttunnel
 ```
 
 Start **LightTunnel** from the application menu or run `~/.local/bin/lighttunnel`. The GUI never
-runs as root; Polkit asks for permission only when the protected TUN service is started. sing-box
-does not need to be installed separately because LightTunnel downloads and verifies it on first
-launch.
+runs as root; Polkit asks for permission only when the protected TUN service is started. Neither
+core needs to be installed separately because LightTunnel downloads and verifies the selected one.
 
 To remove the per-user installation while keeping profiles and settings:
 
@@ -86,9 +88,9 @@ makepkg -si
 to install dependencies or the finished package. Installed files are tracked by pacman and work in
 both KDE and GNOME sessions.
 
-On a clean Arch/GNOME laptop this single command is sufficient; sing-box is obtained securely by
-LightTunnel on first launch. GNOME may need the AppIndicator/KStatusNotifier extension for the tray
-icon, while the main window works without it.
+On a clean Arch/GNOME laptop this single command is sufficient; the selected core is obtained
+securely by LightTunnel on first launch. GNOME may need the AppIndicator/KStatusNotifier extension
+for the tray icon, while the main window works without it.
 
 Run tests:
 
@@ -103,8 +105,8 @@ Install only for the current user:
 ./scripts/install-user.sh
 ```
 
-This installs the binary, desktop entry and icon below `~/.local`; it does not install or modify
-sing-box.
+This installs the binary, desktop entry and icon below `~/.local`; cores remain user-managed by
+LightTunnel.
 
 ## 🧹 Uninstall
 
@@ -129,7 +131,8 @@ Profiles and settings are retained by default. To delete them as well:
 ## 🚀 First connection
 
 1. Open **Profiles…** and paste a `vless://` link.
-2. Open **Settings** and verify the detected sing-box and network interface.
+2. Open **Settings**, choose `sing-box` or `Xray`, and leave the output interface on Automatic
+   unless you need to bind a specific physical interface.
 3. Press **Connect** and approve the standard Polkit prompt.
 4. Use the tray menu to hide, reconnect or quit.
 
@@ -147,10 +150,11 @@ Profiles contain credentials. They live in:
 ~/.config/LightTunnel/LightTunnel/profiles.json
 ```
 
-The generated sing-box configuration lives under the application data directory and is recreated
+The generated core configuration lives under the application data directory and is recreated
 before a connection. Both files are owner-readable only. Secrets are never printed to the UI log.
 
-Managed cores are stored below `~/.local/share/LightTunnel/LightTunnel/core` with mode `0700`.
+Managed cores are stored below `~/.local/share/LightTunnel/LightTunnel/cores/{sing-box,xray}` with
+mode `0700`.
 Update checks run at most once per 24 hours unless started manually. Downloads use HTTPS, are size
 limited, and are activated only after their GitHub Release SHA-256 and embedded version both match.
 
@@ -158,10 +162,10 @@ For a threat model and design details, see [docs/ARCHITECTURE.md](docs/ARCHITECT
 
 ## ⚠️ Known limitations
 
-- VLESS XHTTP is specific to Xray-core and is not implemented by the sing-box backend. Supporting
-  it requires a separate Xray-based transport backend rather than translating it to plain HTTP.
-- The TUN currently operates in IPv4-only mode; DNS responses are restricted to IPv4 to avoid
-  connection fallback delays on networks without routed IPv6.
+- XHTTP profiles require selecting Xray; LightTunnel reports a clear error if one is started with
+  sing-box.
+- The sing-box backend currently uses an IPv4-only TUN and restricts DNS responses to IPv4. Xray's
+  native TUN routes both IPv4 and IPv6 through the server.
 - Subscription import is currently one-shot; periodic background refresh and QR scanning are planned.
 - GNOME may require an AppIndicator/status notifier shell extension for full tray interaction.
 - Profiles are protected by filesystem permissions, not by KWallet/Secret Service encryption yet.
@@ -169,5 +173,5 @@ For a threat model and design details, see [docs/ARCHITECTURE.md](docs/ARCHITECT
 
 ## 📄 Licensing
 
-LightTunnel source code is MIT licensed. sing-box is a separate executable distributed under
-GPL-3.0-or-later; consult its own repository and license when redistributing it.
+LightTunnel source code is MIT licensed. sing-box and Xray are separate upstream executables with
+their own licenses; consult the respective upstream repository before redistributing either core.

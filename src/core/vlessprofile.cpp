@@ -28,6 +28,9 @@ QString normalizedTransport(QString transport)
     if (transport.isEmpty() || transport == QStringLiteral("raw")) {
         return QStringLiteral("tcp");
     }
+    if (transport == QStringLiteral("splithttp")) {
+        return QStringLiteral("xhttp");
+    }
     return transport;
 }
 
@@ -71,6 +74,7 @@ std::optional<VlessProfile> VlessProfile::fromUri(const QString &uri, QString *e
     profile.path = queryValue(query, QStringLiteral("path"));
     profile.host = queryValue(query, QStringLiteral("host"));
     profile.serviceName = queryValue(query, QStringLiteral("serviceName"));
+    profile.xhttpMode = queryValue(query, QStringLiteral("mode"));
     profile.maxEarlyData = queryValue(query, QStringLiteral("ed")).toInt();
     profile.earlyDataHeader = queryValue(query, QStringLiteral("eh"));
     profile.allowInsecure = parseBoolean(queryValue(query, QStringLiteral("allowInsecure")));
@@ -116,6 +120,7 @@ std::optional<VlessProfile> VlessProfile::fromJson(const QJsonObject &object, QS
     profile.path = object.value(QStringLiteral("path")).toString();
     profile.host = object.value(QStringLiteral("host")).toString();
     profile.serviceName = object.value(QStringLiteral("serviceName")).toString();
+    profile.xhttpMode = object.value(QStringLiteral("xhttpMode")).toString();
     profile.maxEarlyData = qMax(0, object.value(QStringLiteral("maxEarlyData")).toInt(0));
     profile.earlyDataHeader = object.value(QStringLiteral("earlyDataHeader")).toString();
     profile.allowInsecure = object.value(QStringLiteral("allowInsecure")).toBool(false);
@@ -156,6 +161,7 @@ QJsonObject VlessProfile::toJson() const
         {QStringLiteral("path"), path},
         {QStringLiteral("host"), host},
         {QStringLiteral("serviceName"), serviceName},
+        {QStringLiteral("xhttpMode"), xhttpMode},
         {QStringLiteral("maxEarlyData"), maxEarlyData},
         {QStringLiteral("earlyDataHeader"), earlyDataHeader},
         {QStringLiteral("allowInsecure"), allowInsecure},
@@ -184,15 +190,12 @@ QString VlessProfile::validationError() const
     }
 
     const QString normalized = normalizedTransport(transport);
-    if (normalized == QStringLiteral("xhttp") || normalized == QStringLiteral("splithttp")) {
-        return QStringLiteral("XHTTP требует Xray-core и не поддерживается ядром sing-box");
-    }
-
     static const QSet<QString> supportedTransports{
         QStringLiteral("tcp"),
         QStringLiteral("ws"),
         QStringLiteral("grpc"),
         QStringLiteral("httpupgrade"),
+        QStringLiteral("xhttp"),
     };
     if (!supportedTransports.contains(normalized)) {
         return QStringLiteral("Транспорт «%1» пока не поддерживается").arg(transport);

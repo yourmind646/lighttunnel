@@ -54,15 +54,26 @@ SettingsDialog::SettingsDialog(const AppSettings &settings, QWidget *parent)
     form->setHorizontalSpacing(20);
     form->setVerticalSpacing(12);
 
+    m_coreType = new QComboBox(this);
+    m_coreType->addItem(QStringLiteral("sing-box"), QStringLiteral("sing-box"));
+    m_coreType->addItem(QStringLiteral("Xray"), QStringLiteral("xray"));
+    m_coreType->setCurrentIndex(m_coreType->findData(coreTypeKey(settings.coreType)));
+    makePopupOpaque(m_coreType);
+    form->addRow(QStringLiteral("Ядро:"), m_coreType);
+
+    m_shownCoreType = settings.coreType;
+    m_singBoxPath = settings.singBoxPath;
+    m_xrayPath = settings.xrayPath;
+
     auto *coreRow = new QWidget(this);
     coreRow->setObjectName(QStringLiteral("transparentContainer"));
     auto *coreLayout = new QHBoxLayout(coreRow);
     coreLayout->setContentsMargins(0, 0, 0, 0);
-    m_corePath = new QLineEdit(settings.corePath, coreRow);
+    m_corePath = new QLineEdit(settings.corePath(), coreRow);
     auto *browse = new QPushButton(QStringLiteral("Обзор…"), coreRow);
     coreLayout->addWidget(m_corePath, 1);
     coreLayout->addWidget(browse);
-    form->addRow(QStringLiteral("sing-box:"), coreRow);
+    form->addRow(QStringLiteral("Исполняемый файл:"), coreRow);
 
     m_interface = new QComboBox(this);
     m_interface->setEditable(false);
@@ -108,7 +119,7 @@ SettingsDialog::SettingsDialog(const AppSettings &settings, QWidget *parent)
     m_autostart = new QCheckBox(QStringLiteral("Запускать LightTunnel при входе в систему"), this);
     m_autostart->setChecked(settings.autostart);
     m_autoUpdateCore = new QCheckBox(
-        QStringLiteral("Автоматически проверять и безопасно обновлять sing-box"), this);
+        QStringLiteral("Автоматически проверять и безопасно обновлять выбранное ядро"), this);
     m_autoUpdateCore->setChecked(settings.autoUpdateCore);
 
     mainLayout->addWidget(m_blockQuic);
@@ -130,14 +141,20 @@ SettingsDialog::SettingsDialog(const AppSettings &settings, QWidget *parent)
     mainLayout->addWidget(buttons);
 
     connect(browse, &QPushButton::clicked, this, &SettingsDialog::chooseCore);
+    connect(m_coreType, &QComboBox::currentIndexChanged,
+            this, &SettingsDialog::selectedCoreTypeChanged);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    selectedCoreTypeChanged(m_coreType->currentIndex());
 }
 
 AppSettings SettingsDialog::settings() const
 {
     AppSettings value = m_original;
-    value.corePath = m_corePath->text().trimmed();
+    value.coreType = coreTypeFromKey(m_coreType->currentData().toString());
+    value.singBoxPath = m_singBoxPath;
+    value.xrayPath = m_xrayPath;
+    value.setCorePath(m_corePath->text());
     value.networkInterface = m_interface->currentData().toString();
     value.tunStack = m_stack->currentData().toString();
     value.mtu = m_mtu->value();
@@ -153,12 +170,29 @@ void SettingsDialog::chooseCore()
 {
     const QString selected = QFileDialog::getOpenFileName(
         this,
-        QStringLiteral("Выберите sing-box"),
+        QStringLiteral("Выберите %1").arg(coreDisplayName(m_shownCoreType)),
         m_corePath->text(),
         QStringLiteral("Исполняемые файлы (*)"));
     if (!selected.isEmpty()) {
         m_corePath->setText(selected);
     }
+}
+
+void SettingsDialog::selectedCoreTypeChanged(int index)
+{
+    Q_UNUSED(index)
+    if (m_shownCoreType == CoreType::Xray) {
+        m_xrayPath = m_corePath->text().trimmed();
+    } else {
+        m_singBoxPath = m_corePath->text().trimmed();
+    }
+
+    m_shownCoreType = coreTypeFromKey(m_coreType->currentData().toString());
+    m_corePath->setText(m_shownCoreType == CoreType::Xray ? m_xrayPath : m_singBoxPath);
+    m_stack->setEnabled(m_shownCoreType == CoreType::SingBox);
+    m_stack->setToolTip(m_shownCoreType == CoreType::Xray
+                            ? QStringLiteral("Xray использует собственный нативный TUN")
+                            : QString());
 }
 
 } // namespace lighttunnel

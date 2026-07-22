@@ -3,6 +3,7 @@
 #include "core/singboxconfigbuilder.h"
 #include "core/systemdcommandbuilder.h"
 #include "core/vlessprofile.h"
+#include "core/xrayconfigbuilder.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -12,9 +13,11 @@
 
 using lighttunnel::AppSettings;
 using lighttunnel::CoreUpdateManager;
+using lighttunnel::CoreType;
 using lighttunnel::SingBoxConfigBuilder;
 using lighttunnel::SystemdCommandBuilder;
 using lighttunnel::VlessProfile;
+using lighttunnel::XrayConfigBuilder;
 
 class CoreTests final : public QObject {
     Q_OBJECT
@@ -22,13 +25,17 @@ class CoreTests final : public QObject {
 private slots:
     void parsesRealityUri();
     void parsesWebSocketUri();
-    void rejectsUnsupportedTransport();
+    void parsesXhttpUri();
     void bindsEveryNetworkOutbound();
     void ipv4TunUsesIpv4Dns();
     void quicPolicyIsExplicit();
     void systemdServiceUsesCallingUserWithNetworkCapabilities();
+    void xrayRunsAsTheOnlySelectedCore();
+    void xrayKeepsServerRoutingAuthoritative();
     void parsesVerifiedCoreRelease();
+    void parsesVerifiedXrayRelease();
     void generatedConfigPassesSingBoxCheck();
+    void generatedConfigPassesXrayCheck();
 };
 
 void CoreTests::parsesRealityUri()
@@ -62,13 +69,18 @@ void CoreTests::parsesWebSocketUri()
     QCOMPARE(profile->maxEarlyData, 2048);
 }
 
-void CoreTests::rejectsUnsupportedTransport()
+void CoreTests::parsesXhttpUri()
 {
     const QString uri = QStringLiteral(
-        "vless://11111111-2222-3333-4444-555555555555@example.com:443?type=xhttp#Unsupported");
+        "vless://11111111-2222-3333-4444-555555555555@example.com:443"
+        "?security=reality&sni=example.com&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        "&type=splithttp&path=%2Fedge&host=cdn.example.com&mode=packet-up#XHTTP");
     QString error;
-    QVERIFY(!VlessProfile::fromUri(uri, &error).has_value());
-    QVERIFY(error.contains(QStringLiteral("Xray-core")));
+    const auto profile = VlessProfile::fromUri(uri, &error);
+    QVERIFY2(profile.has_value(), qPrintable(error));
+    QCOMPARE(profile->transport, QStringLiteral("xhttp"));
+    QCOMPARE(profile->path, QStringLiteral("/edge"));
+    QCOMPARE(profile->xhttpMode, QStringLiteral("packet-up"));
 }
 
 void CoreTests::bindsEveryNetworkOutbound()
@@ -143,6 +155,44 @@ void CoreTests::systemdServiceUsesCallingUserWithNetworkCapabilities()
     QVERIFY(!arguments.join(QLatin1Char(' ')).contains(QStringLiteral("CAP_DAC")));
 }
 
+void CoreTests::xrayRunsAsTheOnlySelectedCore()
+{
+    const QStringList arguments = SystemdCommandBuilder::startArguments(
+        QStringLiteral("lighttunnel-core-1000.service"),
+        QStringLiteral("/usr/bin/xray"),
+        QStringLiteral("/home/user/.local/share/LightTunnel/runtime/config.json"),
+        1000,
+        1000,
+        CoreType::Xray);
+
+    QCOMPARE(arguments.count(QStringLiteral("/usr/bin/xray")), 1);
+    QVERIFY(!arguments.contains(QStringLiteral("sing-box")));
+    QVERIFY(!arguments.contains(QStringLiteral("--disable-color")));
+    QVERIFY(arguments.contains(QStringLiteral("run")));
+}
+
+void CoreTests::xrayKeepsServerRoutingAuthoritative()
+{
+    VlessProfile profile;
+    profile.uuid = QStringLiteral("11111111-2222-3333-4444-555555555555");
+    profile.server = QStringLiteral("example.com");
+    const QJsonObject config = XrayConfigBuilder::build(
+        profile, AppSettings{}, QStringLiteral("wlan0"));
+
+    const QJsonArray outbounds = config.value(QStringLiteral("outbounds")).toArray();
+    QCOMPARE(outbounds.first().toObject().value(QStringLiteral("tag")).toString(),
+             QStringLiteral("proxy"));
+    const QJsonArray rules = config.value(QStringLiteral("routing")).toObject()
+                                 .value(QStringLiteral("rules")).toArray();
+    QCOMPARE(rules.size(), 1);
+    QVERIFY(!rules.first().toObject().contains(QStringLiteral("domain")));
+
+    const QJsonObject sniffing = config.value(QStringLiteral("inbounds")).toArray().first().toObject()
+                                      .value(QStringLiteral("sniffing")).toObject();
+    QVERIFY(sniffing.value(QStringLiteral("enabled")).toBool());
+    QVERIFY(!sniffing.value(QStringLiteral("routeOnly")).toBool());
+}
+
 void CoreTests::parsesVerifiedCoreRelease()
 {
     const QByteArray json = R"json({
@@ -166,7 +216,7 @@ void CoreTests::parsesVerifiedCoreRelease()
     })json";
 
     QString error;
-    const auto release = CoreUpdateManager::parseRelease(json, &error);
+    const auto release = CoreUpdateManager::parseRelease(json, CoreType::SingBox, &error);
     QVERIFY2(release.has_value(), qPrintable(error));
     QCOMPARE(release->version, QStringLiteral("1.13.14"));
     QCOMPARE(release->sha256.size(), 64);
@@ -174,9 +224,30 @@ void CoreTests::parsesVerifiedCoreRelease()
     QCOMPARE(release->downloadUrl.scheme(), QStringLiteral("https"));
 }
 
+void CoreTests::parsesVerifiedXrayRelease()
+{
+    const QByteArray json = R"json({
+        "tag_name": "v26.3.27",
+        "draft": false,
+        "prerelease": false,
+        "assets": [{
+            "name": "Xray-linux-64.zip",
+            "size": 21136402,
+            "digest": "sha256:23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae",
+            "browser_download_url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip"
+        }]
+    })json";
+
+    QString error;
+    const auto release = CoreUpdateManager::parseRelease(json, CoreType::Xray, &error);
+    QVERIFY2(release.has_value(), qPrintable(error));
+    QCOMPARE(release->version, QStringLiteral("26.3.27"));
+    QCOMPARE(release->assetName, QStringLiteral("Xray-linux-64.zip"));
+}
+
 void CoreTests::generatedConfigPassesSingBoxCheck()
 {
-    const QString core = AppSettings::discoverCore();
+    const QString core = AppSettings::discoverCore(CoreType::SingBox);
     if (core.isEmpty()) {
         QSKIP("sing-box is not installed");
     }
@@ -200,6 +271,44 @@ void CoreTests::generatedConfigPassesSingBoxCheck()
 
     QProcess check;
     check.start(core, {QStringLiteral("check"), QStringLiteral("-c"), path});
+    QVERIFY(check.waitForFinished(10000));
+    const QByteArray details = check.readAllStandardError() + check.readAllStandardOutput();
+    QVERIFY2(check.exitCode() == 0, qPrintable(QString::fromUtf8(details)));
+}
+
+void CoreTests::generatedConfigPassesXrayCheck()
+{
+    QString core = qEnvironmentVariable("LIGHTTUNNEL_TEST_XRAY");
+    if (core.isEmpty()) {
+        core = AppSettings::discoverCore(CoreType::Xray);
+    }
+    if (core.isEmpty()) {
+        QSKIP("Xray is not installed");
+    }
+    QVERIFY(!CoreUpdateManager::detectVersion(core, CoreType::Xray).isEmpty());
+
+    VlessProfile profile;
+    profile.uuid = QStringLiteral("11111111-2222-3333-4444-555555555555");
+    profile.server = QStringLiteral("example.com");
+    profile.security = QStringLiteral("reality");
+    profile.serverName = QStringLiteral("example.com");
+    profile.publicKey = QStringLiteral("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    profile.shortId = QStringLiteral("0123456789abcdef");
+    profile.transport = QStringLiteral("xhttp");
+    profile.path = QStringLiteral("/edge");
+    profile.xhttpMode = QStringLiteral("packet-up");
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("config.json"));
+    QString error;
+    QVERIFY2(XrayConfigBuilder::writeSecurely(
+                 XrayConfigBuilder::build(profile, AppSettings{}, QStringLiteral("wlan0")), path, &error),
+             qPrintable(error));
+
+    QProcess check;
+    check.start(core, {QStringLiteral("run"), QStringLiteral("-test"), QStringLiteral("-dump"),
+                       QStringLiteral("-c"), path});
     QVERIFY(check.waitForFinished(10000));
     const QByteArray details = check.readAllStandardError() + check.readAllStandardOutput();
     QVERIFY2(check.exitCode() == 0, qPrintable(QString::fromUtf8(details)));

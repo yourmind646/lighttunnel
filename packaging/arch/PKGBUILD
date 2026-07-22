@@ -2,8 +2,8 @@
 
 pkgname=lighttunnel
 pkgver=0.1.0
-pkgrel=7
-pkgdesc='Lightweight native VLESS VPN client powered by sing-box'
+pkgrel=8
+pkgdesc='Lightweight native VLESS VPN client powered by sing-box or Xray'
 arch=('x86_64')
 license=('MIT')
 depends=('qt6-base' 'systemd' 'polkit' 'libarchive')

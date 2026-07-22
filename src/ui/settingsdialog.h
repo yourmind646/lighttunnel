@@ -20,9 +20,14 @@ public:
 
 private slots:
     void chooseCore();
+    void selectedCoreTypeChanged(int index);
 
 private:
     AppSettings m_original;
+    CoreType m_shownCoreType{CoreType::SingBox};
+    QString m_singBoxPath;
+    QString m_xrayPath;
+    QComboBox *m_coreType{};
     QLineEdit *m_corePath{};
     QComboBox *m_interface{};
     QComboBox *m_stack{};

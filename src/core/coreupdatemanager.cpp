@@ -40,6 +40,41 @@ QString normalizedArchitecture()
     return {};
 }
 
+QString releaseArchitecture(CoreType type)
+{
+    const QString architecture = normalizedArchitecture();
+    if (type == CoreType::SingBox) {
+        return architecture;
+    }
+    if (architecture == QStringLiteral("amd64")) {
+        return QStringLiteral("64");
+    }
+    if (architecture == QStringLiteral("arm64")) {
+        return QStringLiteral("arm64-v8a");
+    }
+    return {};
+}
+
+QString binaryName(CoreType type)
+{
+    return type == CoreType::Xray ? QStringLiteral("xray") : QStringLiteral("sing-box");
+}
+
+QString metadataUrl(CoreType type)
+{
+    return type == CoreType::Xray
+        ? QStringLiteral("https://api.github.com/repos/XTLS/Xray-core/releases/latest")
+        : QStringLiteral("https://api.github.com/repos/SagerNet/sing-box/releases/latest");
+}
+
+QString expectedAssetName(CoreType type, const QString &version)
+{
+    const QString architecture = releaseArchitecture(type);
+    return type == CoreType::Xray
+        ? QStringLiteral("Xray-linux-%1.zip").arg(architecture)
+        : QStringLiteral("sing-box-%1-linux-%2.tar.gz").arg(version, architecture);
+}
+
 QString normalizedVersion(QString version)
 {
     version = version.trimmed();
@@ -107,10 +142,14 @@ CoreUpdateManager::CoreUpdateManager(QObject *parent)
 
 CoreUpdateManager::~CoreUpdateManager() = default;
 
-void CoreUpdateManager::setCurrentCore(const QString &path)
+void CoreUpdateManager::setCore(CoreType type, const QString &path)
 {
+    if (isBusy()) {
+        return;
+    }
+    m_coreType = type;
     m_currentPath = path.trimmed();
-    m_currentVersion = detectVersion(m_currentPath);
+    m_currentVersion = detectVersion(m_currentPath, m_coreType);
     emit currentVersionChanged(m_currentVersion);
 }
 
@@ -121,17 +160,20 @@ void CoreUpdateManager::checkForUpdates(bool force)
     }
 
     if (normalizedArchitecture().isEmpty()) {
-        finishWithError(QStringLiteral("Автообновление sing-box пока поддерживает только x86_64 и arm64"));
+        finishWithError(QStringLiteral("Автообновление %1 пока поддерживает только x86_64 и arm64")
+                            .arg(coreDisplayName(m_coreType)));
         return;
     }
 
     if (!force && !m_currentPath.isEmpty()) {
         QSettings settings;
-        const QDateTime lastCheck = settings.value(QStringLiteral("core/lastUpdateCheck")).toDateTime();
+        const QDateTime lastCheck = settings.value(
+            QStringLiteral("core/%1/lastUpdateCheck").arg(coreTypeKey(m_coreType))).toDateTime();
         if (lastCheck.isValid() && lastCheck.secsTo(QDateTime::currentDateTimeUtc()) < 24 * 60 * 60) {
             emit statusChanged(m_currentVersion.isEmpty()
                                    ? QStringLiteral("Автопроверка выполнена недавно")
-                                   : QStringLiteral("sing-box %1 · недавно проверено").arg(m_currentVersion));
+                                   : QStringLiteral("%1 %2 · недавно проверено")
+                                         .arg(coreDisplayName(m_coreType), m_currentVersion));
             return;
         }
     }
@@ -139,7 +181,7 @@ void CoreUpdateManager::checkForUpdates(bool force)
     requestMetadata();
 }
 
-QString CoreUpdateManager::detectVersion(const QString &corePath)
+QString CoreUpdateManager::detectVersion(const QString &corePath, CoreType type)
 {
     const QFileInfo info(corePath);
     if (!info.isFile() || !info.isExecutable()) {
@@ -155,14 +197,19 @@ QString CoreUpdateManager::detectVersion(const QString &corePath)
 
     const QString output = QString::fromUtf8(process.readAllStandardOutput()
                                               + process.readAllStandardError());
+    const QString pattern = type == CoreType::Xray
+        ? QStringLiteral("(?:^|\\n)Xray\\s+([^\\s]+)")
+        : QStringLiteral("(?:^|\\n)sing-box version\\s+([^\\s]+)");
     const QRegularExpression expression(
-        QStringLiteral("(?:^|\\n)sing-box version\\s+([^\\s]+)"),
+        pattern,
         QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch match = expression.match(output);
     return match.hasMatch() ? normalizedVersion(match.captured(1)) : QString();
 }
 
-std::optional<CoreRelease> CoreUpdateManager::parseRelease(const QByteArray &json, QString *error)
+std::optional<CoreRelease> CoreUpdateManager::parseRelease(const QByteArray &json,
+                                                           CoreType type,
+                                                           QString *error)
 {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
@@ -183,7 +230,7 @@ std::optional<CoreRelease> CoreUpdateManager::parseRelease(const QByteArray &jso
     }
 
     const QString version = normalizedVersion(root.value(QStringLiteral("tag_name")).toString());
-    const QString architecture = normalizedArchitecture();
+    const QString architecture = releaseArchitecture(type);
     if (version.isEmpty() || architecture.isEmpty()
         || !QRegularExpression(QStringLiteral("^[0-9A-Za-z._-]+$")).match(version).hasMatch()) {
         if (error != nullptr) {
@@ -192,8 +239,7 @@ std::optional<CoreRelease> CoreUpdateManager::parseRelease(const QByteArray &jso
         return std::nullopt;
     }
 
-    const QString expectedName = QStringLiteral("sing-box-%1-linux-%2.tar.gz")
-                                     .arg(version, architecture);
+    const QString expectedName = expectedAssetName(type, version);
     const QJsonArray assets = root.value(QStringLiteral("assets")).toArray();
     for (const QJsonValue &value : assets) {
         const QJsonObject asset = value.toObject();
@@ -220,26 +266,25 @@ std::optional<CoreRelease> CoreUpdateManager::parseRelease(const QByteArray &jso
     }
 
     if (error != nullptr) {
-        *error = QStringLiteral("Для архитектуры %1 не найден официальный Linux-архив sing-box")
-                     .arg(architecture);
+        *error = QStringLiteral("Для архитектуры %1 не найден официальный Linux-архив %2")
+                     .arg(architecture, coreDisplayName(type));
     }
     return std::nullopt;
 }
 
-QString CoreUpdateManager::managedCoreDirectory()
+QString CoreUpdateManager::managedCoreDirectory(CoreType type)
 {
-    return QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
-        .filePath(QStringLiteral("core"));
+    return AppSettings::managedCoreDirectory(type);
 }
 
 void CoreUpdateManager::requestMetadata()
 {
     m_metadata.clear();
     m_operation = Operation::Metadata;
-    emit statusChanged(QStringLiteral("Проверяем обновления sing-box…"));
+    emit statusChanged(QStringLiteral("Проверяем обновления %1…")
+                           .arg(coreDisplayName(m_coreType)));
 
-    QNetworkRequest request(QUrl(QStringLiteral(
-        "https://api.github.com/repos/SagerNet/sing-box/releases/latest")));
+    QNetworkRequest request{QUrl(metadataUrl(m_coreType))};
     request.setRawHeader("Accept", "application/vnd.github+json");
     request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
     request.setRawHeader("User-Agent", "LightTunnel/0.1");
@@ -262,7 +307,8 @@ void CoreUpdateManager::handleMetadataFinished()
     if (m_reply->error() != QNetworkReply::NoError) {
         const QString details = m_reply->errorString();
         clearReply();
-        finishWithError(QStringLiteral("Не удалось проверить обновление sing-box: %1").arg(details));
+        finishWithError(QStringLiteral("Не удалось проверить обновление %1: %2")
+                            .arg(coreDisplayName(m_coreType), details));
         return;
     }
     if (m_metadata.size() > MaxMetadataSize) {
@@ -272,17 +318,23 @@ void CoreUpdateManager::handleMetadataFinished()
     }
 
     QString error;
-    const auto release = parseRelease(m_metadata, &error);
+    const auto release = parseRelease(m_metadata, m_coreType, &error);
     clearReply();
     if (!release.has_value()) {
         finishWithError(error);
         return;
     }
 
-    QSettings settings;
-    settings.setValue(QStringLiteral("core/lastUpdateCheck"), QDateTime::currentDateTimeUtc());
-    if (!m_currentVersion.isEmpty() && !isNewer(release->version, m_currentVersion)) {
-        emit statusChanged(QStringLiteral("sing-box %1 · актуальная версия").arg(m_currentVersion));
+    const QString managedPrefix = QDir(managedCoreDirectory(m_coreType)).absolutePath()
+        + QDir::separator();
+    const bool currentIsManaged = QFileInfo(m_currentPath).absoluteFilePath().startsWith(managedPrefix);
+    if (currentIsManaged && !m_currentVersion.isEmpty()
+        && !isNewer(release->version, m_currentVersion)) {
+        QSettings settings;
+        settings.setValue(QStringLiteral("core/%1/lastUpdateCheck").arg(coreTypeKey(m_coreType)),
+                          QDateTime::currentDateTimeUtc());
+        emit statusChanged(QStringLiteral("%1 %2 · актуальная версия")
+                               .arg(coreDisplayName(m_coreType), m_currentVersion));
         return;
     }
     beginDownload(*release);
@@ -293,7 +345,7 @@ void CoreUpdateManager::beginDownload(const CoreRelease &release)
     m_release = release;
     m_downloadedBytes = 0;
     m_archive = std::make_unique<QTemporaryFile>(
-        QDir::temp().filePath(QStringLiteral("lighttunnel-core-XXXXXX.tar.gz")));
+        QDir::temp().filePath(QStringLiteral("lighttunnel-core-XXXXXX.archive")));
     m_archive->setAutoRemove(true);
     if (!m_archive->open()) {
         finishWithError(QStringLiteral("Не удалось создать временный файл для обновления"));
@@ -301,7 +353,8 @@ void CoreUpdateManager::beginDownload(const CoreRelease &release)
     }
 
     m_operation = Operation::Download;
-    emit statusChanged(QStringLiteral("Скачиваем sing-box %1…").arg(release.version));
+    emit statusChanged(QStringLiteral("Скачиваем %1 %2…")
+                           .arg(coreDisplayName(m_coreType), release.version));
     emit progressChanged(0);
 
     QNetworkRequest request(release.downloadUrl);
@@ -338,7 +391,8 @@ void CoreUpdateManager::handleDownloadFinished()
         const QString details = m_reply->errorString();
         clearReply();
         m_archive.reset();
-        finishWithError(QStringLiteral("Не удалось скачать sing-box: %1").arg(details));
+        finishWithError(QStringLiteral("Не удалось скачать %1: %2")
+                            .arg(coreDisplayName(m_coreType), details));
         return;
     }
     clearReply();
@@ -347,7 +401,8 @@ void CoreUpdateManager::handleDownloadFinished()
     m_archive->close();
     if (m_downloadedBytes != m_release.size) {
         m_archive.reset();
-        finishWithError(QStringLiteral("Размер скачанного архива sing-box не совпадает с метаданными"));
+        finishWithError(QStringLiteral("Размер скачанного архива %1 не совпадает с метаданными")
+                            .arg(coreDisplayName(m_coreType)));
         return;
     }
 
@@ -363,7 +418,8 @@ void CoreUpdateManager::handleDownloadFinished()
     }
     if (hash.result().toHex().toLower() != m_release.sha256) {
         m_archive.reset();
-        finishWithError(QStringLiteral("SHA-256 скачанного sing-box не совпадает с GitHub Release"));
+        finishWithError(QStringLiteral("SHA-256 скачанного %1 не совпадает с GitHub Release")
+                            .arg(coreDisplayName(m_coreType)));
         return;
     }
 
@@ -377,10 +433,14 @@ void CoreUpdateManager::handleDownloadFinished()
     m_archive.reset();
     m_currentPath = installedPath;
     m_currentVersion = m_release.version;
+    QSettings settings;
+    settings.setValue(QStringLiteral("core/%1/lastUpdateCheck").arg(coreTypeKey(m_coreType)),
+                      QDateTime::currentDateTimeUtc());
     emit progressChanged(100);
     emit currentVersionChanged(m_currentVersion);
     emit coreInstalled(installedPath, m_currentVersion);
-    emit statusChanged(QStringLiteral("sing-box %1 · обновлено").arg(m_currentVersion));
+    emit statusChanged(QStringLiteral("%1 %2 · обновлено")
+                           .arg(coreDisplayName(m_coreType), m_currentVersion));
 }
 
 bool CoreUpdateManager::installDownloadedCore(QString *installedPath, QString *error)
@@ -398,7 +458,8 @@ bool CoreUpdateManager::installDownloadedCore(QString *installedPath, QString *e
     list.start(tarPath, {QStringLiteral("-tf"), archivePath});
     if (!list.waitForFinished(20000) || list.exitCode() != 0) {
         if (error != nullptr) {
-            *error = QStringLiteral("Не удалось прочитать официальный архив sing-box");
+            *error = QStringLiteral("Не удалось прочитать официальный архив %1")
+                         .arg(coreDisplayName(m_coreType));
         }
         return false;
     }
@@ -406,12 +467,17 @@ bool CoreUpdateManager::installDownloadedCore(QString *installedPath, QString *e
     QString member;
     const QStringList entries = QString::fromUtf8(list.readAllStandardOutput())
                                     .split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    const QString executable = binaryName(m_coreType);
     for (const QString &entry : entries) {
-        if (entry.endsWith(QStringLiteral("/sing-box")) && !entry.startsWith(QLatin1Char('/'))
+        const bool expectedMember = m_coreType == CoreType::Xray
+            ? entry == executable
+            : entry.endsWith(QStringLiteral("/") + executable);
+        if (expectedMember && !entry.startsWith(QLatin1Char('/'))
             && !entry.split(QLatin1Char('/')).contains(QStringLiteral(".."))) {
             if (!member.isEmpty()) {
                 if (error != nullptr) {
-                    *error = QStringLiteral("В архиве обнаружено несколько файлов sing-box");
+                    *error = QStringLiteral("В архиве обнаружено несколько файлов %1")
+                                 .arg(executable);
                 }
                 return false;
             }
@@ -420,7 +486,7 @@ bool CoreUpdateManager::installDownloadedCore(QString *installedPath, QString *e
     }
     if (member.isEmpty()) {
         if (error != nullptr) {
-            *error = QStringLiteral("В архиве отсутствует исполняемый файл sing-box");
+            *error = QStringLiteral("В архиве отсутствует исполняемый файл %1").arg(executable);
         }
         return false;
     }
@@ -428,7 +494,7 @@ bool CoreUpdateManager::installDownloadedCore(QString *installedPath, QString *e
     QTemporaryDir extraction;
     if (!extraction.isValid()) {
         if (error != nullptr) {
-            *error = QStringLiteral("Не удалось создать каталог распаковки sing-box");
+            *error = QStringLiteral("Не удалось создать каталог распаковки %1").arg(executable);
         }
         return false;
     }
@@ -437,7 +503,7 @@ bool CoreUpdateManager::installDownloadedCore(QString *installedPath, QString *e
                             extraction.path(), member});
     if (!extract.waitForFinished(60000) || extract.exitCode() != 0) {
         if (error != nullptr) {
-            *error = QStringLiteral("Не удалось распаковать sing-box");
+            *error = QStringLiteral("Не удалось распаковать %1").arg(executable);
         }
         return false;
     }
@@ -447,12 +513,12 @@ bool CoreUpdateManager::installDownloadedCore(QString *installedPath, QString *e
     if (!sourceInfo.isFile() || sourceInfo.isSymLink() || sourceInfo.size() <= 0
         || sourceInfo.size() > MaxBinarySize) {
         if (error != nullptr) {
-            *error = QStringLiteral("Распакованный файл sing-box не прошёл проверку");
+            *error = QStringLiteral("Распакованный файл %1 не прошёл проверку").arg(executable);
         }
         return false;
     }
 
-    const QString directory = managedCoreDirectory();
+    const QString directory = managedCoreDirectory(m_coreType);
     if (!QDir().mkpath(directory)
         || !QFile::setPermissions(directory,
                                   QFileDevice::ReadOwner | QFileDevice::WriteOwner
@@ -463,12 +529,12 @@ bool CoreUpdateManager::installDownloadedCore(QString *installedPath, QString *e
         return false;
     }
     const QString destination = QDir(directory).filePath(
-        QStringLiteral("sing-box-%1").arg(m_release.version));
+        QStringLiteral("%1-%2").arg(executable, m_release.version));
     if (!copyFileSecurely(sourcePath, destination, error)) {
         return false;
     }
 
-    const QString detectedVersion = detectVersion(destination);
+    const QString detectedVersion = detectVersion(destination, m_coreType);
     if (detectedVersion != m_release.version) {
         QFile::remove(destination);
         if (error != nullptr) {
